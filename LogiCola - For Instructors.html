@@ -5579,7 +5579,11 @@ function powerList(A){       // all subsets, as formatted strings, ∅ first
 /* Study card shown at the top of Set S's menu — this material isn't in Gensler */
 function sStudyCard(){
   return `<div class="study-card">
-    <p class="lead">This topic isn’t in Gensler; the notes below are the whole toolkit for Set S. Skim them, then pick an activity. Order and spacing inside braces never matter when you type an answer.</p>
+    <p class="lead">This topic isn’t in Gensler; the notes below are the whole toolkit for Set S. Order and spacing inside braces never matter when you type an answer.</p>
+
+    <h3>What set theory is</h3>
+    <p>Set theory is the mathematical theory of well-determined collections, called <b>sets</b>, of objects called members or elements of the set. It studies the infinite as well as the finite, and it supplies a common language for talking about collections of any kind.</p>
+    <p>In the standard picture of foundations, mathematical objects can be represented as sets, and mathematical theorems can be deduced, in the predicate calculus, from axioms of set theory. Set theory and first-order logic together thus serve as a foundation in which questions of mathematical existence and proof can be made precise. Logic needs sets for domains, relations, and functions; set theory is itself formulated in the language of first-order logic, with membership (${SS.in}) as its basic relation. The elementary notions below — membership, subset, operations, power sets, pairs, and size — are the working vocabulary of that theory.</p>
 
     <h3>Membership (${SS.in})</h3>
     <p>A set is a collection of things — its <b>members</b>. The symbol ${SS.in} means “is a member of,” and ${SS.ni} means “is not.” So Alice ${SS.in} {Alice, Bob}, and 3 ${SS.in} {1, 2, 3}, but Max ${SS.ni} {Alice, Bob}. Membership does not reach inside members: if A = {1, {2}, 3}, then {2} ${SS.in} A, but the number 2 itself is ${SS.ni} A.</p>
@@ -5970,7 +5974,13 @@ function genS_inf(opts){
 /* Study card shown at the top of Set T's menu */
 function tStudyCard(){
   return `<div class="study-card">
-    <p class="lead">This topic isn’t in Gensler; the notes below are the whole toolkit for Set T. Skim them, then pick an activity. The discipline is keeping syntax, semantics, and metalanguage talk carefully separated.</p>
+    <p class="lead">This topic isn’t in Gensler; the notes below are the whole toolkit for Set T.</p>
+
+    <h3>Why formal languages</h3>
+    <p>Natural languages are flexible. They are also, very often, ambiguous: a single sentence can hide more than one reading, scope can be unclear, and the same words can shift meaning mid-argument. For everyday talk that flexibility is a strength. For the study of reasoning it is an obstacle. If one cannot say exactly what an argument’s premises and conclusion are, one cannot say exactly when the conclusion follows.</p>
+    <p>To understand reasoning as precisely as possible, logicians invent simple <b>formal languages</b>: fixed alphabets of symbols, formation rules that define which strings count as formulas, and (separately) interpretations that give those formulas truth-conditions. The symbols mean only what the rules and the interpretation assign; there is no residual everyday vagueness. Proofs in logic are carried out inside these languages, or in carefully controlled fragments of English regimented to match them.</p>
+    <p>Formal languages serve two roles. First, they are the medium in which logicians state and check arguments: validity, contradiction, and proof become questions about strings and rules, not about tone or rhetoric. Second, the languages themselves become objects of study. One asks what can be proved in a system, what is true under every interpretation, whether every valid formula has a proof, and whether an algorithm can decide the answers. That study of languages, proofs, and interpretations — <b>metatheory</b> — is how general properties of reasoning (its forms, its limits, its kinds of completeness and incompleteness) are made exact. The sections below introduce the distinctions that metatheory requires.</p>
+    <p>Formal languages are not the only way to introduce precision into reasoning. Another strategy is the <b>regimentation</b> of a fragment of natural language, in the spirit of Montague. The aim is to stay inside the natural language itself as far as possible, while fixing its use for a given disciplinary purpose: quantifier phrases are ordered so that scope is unambiguous, pronouns behave like bound variables, and each sentence has one intended logical form. Regimented English is still English, but it is English under explicit constraints. Regimentation is taken up again in the final section of this card.</p>
 
     <h3>Use versus mention</h3>
     <p>When you use a word, you talk about the world; when you mention it, you talk about the expression itself. Boston is a city — that uses the name. ‘Boston’ has six letters — that mentions the word, marked by quotation. Confusing use with mention is a standard source of fallacies about language.</p>

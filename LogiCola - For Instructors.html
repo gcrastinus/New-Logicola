@@ -33,8 +33,8 @@
   .mbtn.small{padding:5px 9px;font-size:13px}
   .score{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--muted)}
   .score b{color:var(--accent);font-size:16px}
-  .bar-meter{width:120px;height:10px;background:#0a1c2e;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
-  .bar-fill{height:100%;width:0;background:linear-gradient(90deg,#5ad17a,#ffd23f);transition:width .3s}
+  .bar-meter{display:inline-block;vertical-align:middle;width:120px;height:10px;background:#0a1c2e;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+  .bar-fill{display:block;height:100%;width:0;min-width:0;background:var(--accent);border-radius:5px;transition:width .25s ease}
   main{padding:16px;flex:1;display:flex;flex-direction:column;gap:14px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
   .setline{color:var(--muted);font-size:13px;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px}

@@ -84,6 +84,18 @@
     max-height:88vh;overflow:auto;padding:22px}
   .modal h2{margin:0 0 12px;color:var(--accent)}
   .modal h3{margin:16px 0 6px}
+  /* App-colored scrollbars (Firefox + Chromium/WebKit) — no light-gray browser chrome */
+  *{scrollbar-width:thin;scrollbar-color:var(--line) var(--panel2)}
+  *::-webkit-scrollbar{width:11px;height:11px}
+  *::-webkit-scrollbar-track{background:var(--panel2);border-radius:8px}
+  *::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px;border:2px solid var(--panel2)}
+  *::-webkit-scrollbar-thumb:hover{background:var(--btnh)}
+  *::-webkit-scrollbar-corner{background:var(--panel2)}
+  .study-card h3{margin:18px 0 6px;color:var(--accent);font-size:15.5px;font-weight:800;
+    letter-spacing:.2px;border-bottom:1px solid var(--line);padding-bottom:4px}
+  .study-card h3:first-of-type{margin-top:10px}
+  .study-card p{margin:0 0 10px;font-size:14.5px;line-height:1.65;color:var(--ink)}
+  .study-card p.lead{color:var(--muted);font-size:14px;margin-bottom:4px}
   .field{margin:12px 0}
   .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
   .field input,.field select{width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--line);
@@ -5492,6 +5504,1078 @@ function genR(){
   return m==='match'?rMatch():rSpot();
 }
 
+/* ================= SET S — SETS ================= */
+const SS={in:'∈',ni:'∉',sub:'⊆',psub:'⊂',cup:'∪',cap:'∩',diff:'−',comp:'′',empty:'∅',times:'×'};
+/* Draw from a fixed bank WITHOUT replacement (per page load): shuffle a deck of
+   indices, deal until empty, reshuffle — and never deal the same item twice in
+   a row across the reshuffle boundary. Cures the repeat-question problem that
+   plain pick() has on small banks. */
+const _decks=new WeakMap();
+function deckPick(bank){
+  let st=_decks.get(bank);
+  if(!st){ st={q:[],last:-1}; _decks.set(bank,st); }
+  if(!st.q.length){
+    st.q=shuffle(bank.map((_,i)=>i));
+    if(st.q.length>1&&st.q[st.q.length-1]===st.last) st.q.unshift(st.q.pop());
+  }
+  const i=st.q.pop(); st.last=i; return bank[i];
+}
+const S_NAMES=['Alice','Bob','Charles','Dana','Erin','Felix','Grace','Hugo','Ivy','Jean','Kara','Luis','Max','Nina','Omar','Rosa'];
+/* Parse & canonicalize a set/pair/atom literal typed by the student.
+   Accepts any member order, spaces, ∅ / Ø / {}, nested sets, pairs (a,b) or ⟨a,b⟩.
+   Returns a canonical string, or null if malformed. */
+function splitTop(s){
+  const parts=[]; let d=0,cur='';
+  for(const ch of s){
+    if('{(⟨'.includes(ch)) d++;
+    else if('})⟩'.includes(ch)) d--;
+    if(d<0) return null;
+    if(ch===','&&d===0){ parts.push(cur); cur=''; } else cur+=ch;
+  }
+  parts.push(cur);
+  return d===0?parts.map(x=>x.trim()):null;
+}
+function canonSetElem(e){
+  e=String(e).trim();
+  if(e==='∅'||e==='Ø'||e==='{}'||/^\{\s*\}$/.test(e)) return '{}';
+  if(e.startsWith('{')&&e.endsWith('}')){
+    const inner=e.slice(1,-1).trim(); if(!inner) return '{}';
+    const parts=splitTop(inner); if(!parts||parts.some(p=>!p)) return null;
+    const els=parts.map(canonSetElem); if(els.some(x=>x===null)) return null;
+    return '{'+uniqStrings(els).sort().join(',')+'}';
+  }
+  if((e.startsWith('(')&&e.endsWith(')'))||(e.startsWith('⟨')&&e.endsWith('⟩'))){
+    const parts=splitTop(e.slice(1,-1)); if(!parts||parts.length!==2||parts.some(p=>!p)) return null;
+    const els=parts.map(canonSetElem); if(els.some(x=>x===null)) return null;
+    return '('+els.join(',')+')';          // pairs keep their order
+  }
+  return /^[A-Za-z0-9]+$/.test(e)?e:null;
+}
+function acceptSet(input,answer){ const a=canonSetElem(input); return a!==null&&a===canonSetElem(answer); }
+function acceptNum(input,answer){ return String(input).trim()===String(answer).trim(); }
+function fmtSet(a){ return a.length?'{'+a.join(', ')+'}':SS.empty; }
+function fmtSetNest(a){ return '{'+a.join(', ')+'}'; }   // for sets whose members are sets
+/* finite-set operations (arrays of atom strings) */
+function sUnion(A,B){ return uniqStrings([...A,...B]).sort(); }
+function sInter(A,B){ return A.filter(x=>B.includes(x)).sort(); }
+function sMinus(A,B){ return A.filter(x=>!B.includes(x)).sort(); }
+function sComp(U,A){ return U.filter(x=>!A.includes(x)); }
+function sDelta(A,B){ return sUnion(sMinus(A,B),sMinus(B,A)); }
+function sEq(A,B){ return fmtSet(A)===fmtSet(B); }
+function sRandUAB(){
+  const base=Math.random()<0.4 ? sampleDistinct(S_NAMES,7)
+    : pick([['1','2','3','4','5','6','7'],['a','b','c','d','e','f','g']]);
+  const U=base.slice(0,5+rand(3)).sort();
+  const sub=()=>U.filter(()=>Math.random()<0.5);
+  let A=sub(),B=sub();
+  if(A.length<2)A=sampleDistinct(U,2).sort(); if(B.length<2)B=sampleDistinct(U,2).sort();
+  return {U,A:A.sort(),B:B.sort()};
+}
+function powerList(A){       // all subsets, as formatted strings, ∅ first
+  let out=[[]];
+  for(const x of A) out=out.concat(out.map(s=>[...s,x]));
+  return out.sort((p,q)=>p.length-q.length).map(s=>s.length?'{'+s.join(',')+'}':SS.empty);
+}
+/* Study card shown at the top of Set S's menu — this material isn't in Gensler */
+function sStudyCard(){
+  return `<div class="study-card">
+    <p class="lead">This topic isn’t in Gensler; the notes below are the whole toolkit for Set S. Skim them, then pick an activity. Order and spacing inside braces never matter when you type an answer.</p>
+
+    <h3>Membership (${SS.in})</h3>
+    <p>A set is a collection of things — its <b>members</b>. The symbol ${SS.in} means “is a member of,” and ${SS.ni} means “is not.” So Alice ${SS.in} {Alice, Bob}, and 3 ${SS.in} {1, 2, 3}, but Max ${SS.ni} {Alice, Bob}. Membership does not reach inside members: if A = {1, {2}, 3}, then {2} ${SS.in} A, but the number 2 itself is ${SS.ni} A.</p>
+
+    <h3>Extensionality — same members, same set</h3>
+    <p>A set is fixed by <em>which</em> things are members, not by how they are listed. Order and repetition are irrelevant: {Alice, Bob} = {Bob, Alice}, and {1, 2, 2} = {1, 2}. Two empty bags are the same bag — there is only one empty set.</p>
+
+    <h3>Subsets (${SS.sub})</h3>
+    <p>A ${SS.sub} B means every member of A is also a member of B. So {Alice} ${SS.sub} {Alice, Bob} and {1, 3} ${SS.sub} {1, 2, 3}. Every set is a subset of itself (A ${SS.sub} A). A <b>proper</b> subset, written ${SS.psub}, is a subset that is not identical to the whole.</p>
+
+    <h3>${SS.in} versus ${SS.sub}</h3>
+    <p>These are easy to mix up. Membership relates a thing to a set; subsethood relates two sets. Alice ${SS.in} {Alice, Bob} — she is one of the people in the group — while {Alice} ${SS.sub} {Alice, Bob} — the one-person set is a subset of the group. The person and the singleton set are different objects: Alice ≠ {Alice}.</p>
+
+    <h3>The empty set (${SS.empty})</h3>
+    <p>${SS.empty} (also written {}) is the set with no members. It is a subset of every set — vacuously, because there is no member of ${SS.empty} that could be missing from the other side. But {${SS.empty}} is different: it has one member, namely ${SS.empty}. A bag containing an empty bag is not empty.</p>
+
+    <h3>Operations: union, intersection, difference, complement</h3>
+    <p>Given a universe U and sets A and B drawn from it: A ${SS.cup} B is everything in either set (or both); A ${SS.cap} B is everything in both; A ${SS.diff} B is everything in A but not in B; and A′ (the complement of A) is everything in U that is not in A. Examples: {1,2} ${SS.cup} {2,3} = {1,2,3} and {1,2} ${SS.cap} {2,3} = {2}. Difference is directional — A ${SS.diff} B need not equal B ${SS.diff} A.</p>
+
+    <h3>Power sets</h3>
+    <p>P(A) is the set of <em>all</em> subsets of A, including ${SS.empty} and A itself. If A has n members, P(A) has 2<sup>n</sup> members — each member of A is either in or out of a given subset. So P({1,2}) = {${SS.empty}, {1}, {2}, {1,2}}, four subsets in all. A set X is a member of P(B) exactly when X ${SS.sub} B.</p>
+
+    <h3>Ordered pairs and products</h3>
+    <p>An ordered pair (a,b) cares about order: (1,2) ≠ (2,1). The product A ${SS.times} B is the set of all pairs with first coordinate from A and second from B, so {1,2} ${SS.times} {x} = {(1,x), (2,x)}. In general |A ${SS.times} B| = |A|·|B|. A <b>relation</b> from A to B is a subset of A ${SS.times} B; a <b>function</b> is a relation that pairs each member of A with exactly one member of B.</p>
+
+    <h3>Infinite sizes</h3>
+    <p>Two sets are the same size when there is a one-to-one correspondence pairing every member of one with exactly one member of the other, nothing left over. For infinite sets that is the only definition that works: the even numbers match the naturals via n ↔ 2n, so they are the same size even though the evens are a proper subset. Cantor’s diagonal argument shows no complete list of the real numbers is possible — ℝ is strictly bigger than ℕ — and his theorem says |P(A)| is always strictly larger than |A|, so infinite sizes climb without end.</p>
+  </div>`;
+}
+function genS(opts){
+  const m=state.sMode||'basics';
+  return m==='ops'?genS_ops(opts):m==='power'?genS_power(opts):m==='pairs'?genS_pairs(opts)
+       :m==='laws'?genS_laws(opts):m==='inf'?genS_inf(opts):genS_basics(opts);
+}
+function genS_ops(opts){
+  const {U,A,B}=sRandUAB();
+  const T=[
+    {q:`A ${SS.cup} B`,        val:sUnion(A,B),  name:'the union'},
+    {q:`A ${SS.cap} B`,        val:sInter(A,B),  name:'the intersection'},
+    {q:`A ${SS.diff} B`,       val:sMinus(A,B),  name:'A minus B'},
+    {q:`B ${SS.diff} A`,       val:sMinus(B,A),  name:'B minus A'},
+    {q:`A${SS.comp}`,          val:sComp(U,A),   name:'the complement of A'},
+    {q:`(A ${SS.cup} B)${SS.comp}`, val:sComp(U,sUnion(A,B)), name:'the complement of the union'},
+    {q:`(A ${SS.cap} B)${SS.comp}`, val:sComp(U,sInter(A,B)), name:'the complement of the intersection'},
+  ];
+  const t=pick(T);
+  const answer=fmtSet(t.val);
+  const others=T.filter(o=>o!==t&&fmtSet(o.val)!==answer)
+                .map(o=>({text:fmtSet(o.val),why:`That is ${o.q} (${o.name}) — the question asks for ${t.q}.`}));
+  const diagnose=(inp)=>{
+    if(opts.type&&canonSetElem(inp)===null)
+      return 'That isn’t a well-formed set literal — use braces and commas, e.g. {1, 3}; write the empty set as ∅ or {}.';
+    for(const o of T) if(o!==t&&acceptSet(inp,fmtSet(o.val)))
+      return `You computed ${o.q} (${o.name}) — the question asks for ${t.q}.`;
+    return null;
+  };
+  return { setLine:'Set S — Sets · Operations',
+    prompt:`U = ${wff(fmtSet(U))} &nbsp; A = ${wff(fmtSet(A))} &nbsp; B = ${wff(fmtSet(B))}<br>Compute ${wff(t.q)}.`,
+    instr:`${SS.cup} union (in either) · ${SS.cap} intersection (in both) · ${SS.diff} difference (in the first but not the second) · ${SS.comp} complement (in U but not in the set). Order inside braces never matters; write ${SS.empty} or {} for the empty set.`,
+    mode:opts.type?'type':'mc', noKeyboard:true, scratch:true, diagnose,
+    choices:mc(answer, shuffle(others)),
+    answer, accept:acceptSet,
+    explain:()=>`${wff(t.q+' = '+answer)}.` };
+}
+function genS_power(opts){
+  const kind=pick(['list','list','card','member','subq','subq']);
+  if(kind==='list'){
+    const {A}=sRandUAB(); const a=A.slice(0,2+rand(2));            // 2–3 members
+    const P=powerList(a); const answer=fmtSetNest(P);
+    const missEmpty=fmtSetNest(P.filter(x=>x!==SS.empty));
+    const missFull =fmtSetNest(P.filter(x=>x!=='{'+a.join(',')+'}'));
+    const elemsOnly=fmtSetNest(a.map(x=>'{'+x+'}'));
+    return { setLine:'Set S — Sets · Power sets',
+      prompt:`A = ${wff(fmtSet(a))}. What is P(A), the power set of A?`,
+      instr:`P(A) is the set of ALL subsets of A — including ${SS.empty} and A itself. A set of n members has 2<sup>n</sup> subsets. When typing, nest braces: {${SS.empty}, {1}, …}.`,
+      mode:opts.type?'type':'mc', noKeyboard:true, scratch:true,
+      choices:mc(answer,[
+        {text:missEmpty, why:`${SS.empty} is a subset of every set, so it always belongs to P(A).`},
+        {text:missFull,  why:`Every set is a subset of itself, so A itself always belongs to P(A).`},
+        {text:elemsOnly, why:`P(A) contains ALL subsets — not just the one-member ones. Don't forget ${SS.empty}, the larger subsets, and A itself.`}]),
+      answer, accept:acceptSet,
+      explain:()=>`P(${fmtSet(a)}) = ${wff(answer)} — 2<sup>${a.length}</sup> = ${P.length} subsets.` };
+  }
+  if(kind==='card'){
+    const n=3+rand(3);   // 3–5: keeps 2ⁿ, n², and 2n all distinct
+    return { setLine:'Set S — Sets · Power sets',
+      prompt:`If |A| = ${n}, how many members does P(A) have?`,
+      instr:`Each member of A is either in or out of a given subset — two choices each, so 2<sup>|A|</sup> subsets in all.`,
+      mode:opts.type?'type':'mc', noKeyboard:true,
+      choices:mc(String(2**n),[
+        {text:String(n*n), why:'That’s n² — but each member contributes a factor of 2 (in or out), giving 2ⁿ.'},
+        {text:String(2*n), why:'That’s 2n — but the choices multiply rather than add: 2ⁿ.'},
+        {text:String(2**n-1), why:'Almost — but don’t forget the empty set is a subset too.'}]),
+      answer:String(2**n), accept:acceptNum,
+      explain:()=>`|P(A)| = 2<sup>${n}</sup> = ${2**n}.` };
+  }
+  if(kind==='member'){
+    const pool=Math.random()<0.5 ? sampleDistinct(S_NAMES,4) : shuffle(['1','2','3','4','5','6']).slice(0,4);
+    const b=pool.slice(0,2+rand(2)).sort();
+    const out=pool[3];
+    const inn=Math.random()<0.5;
+    const cand= inn ? fmtSet(b.filter(()=>Math.random()<0.6)) : fmtSet([b[0],out].sort());
+    const isIn = inn;
+    return { setLine:'Set S — Sets · Power sets',
+      prompt:`B = ${wff(fmtSet(b))}. &nbsp; Is ${wff(cand)} ${SS.in} P(B)?`,
+      instr:`X ${SS.in} P(B) if and only if X ${SS.sub} B. So the question is just: is every member of ${cand} a member of B?`,
+      mode:'mc', noKeyboard:true,
+      choices:[{text:`Yes — ${cand} ${SS.sub} B, and the members of P(B) are exactly the subsets of B`,correct:isIn},
+               {text:`No — ${cand} is not a subset of B, and P(B) contains exactly the subsets of B`,correct:!isIn}],
+      explain:()=>isIn?`Yes: every member of ${cand} is in B, so ${cand} ${SS.sub} B, so ${cand} ${SS.in} P(B).`
+                      :`No: ${cand} has a member not in B, so it isn't a subset of B, so it isn't in P(B).` };
+  }
+  // subq: subset judgments
+  const {A,B}=sRandUAB();
+  const isSub=A.every(x=>B.includes(x));
+  return { setLine:'Set S — Sets · Power sets',
+    prompt:`A = ${wff(fmtSet(A))} &nbsp; B = ${wff(fmtSet(B))}<br>Is A ${SS.sub} B?`,
+    instr:`A ${SS.sub} B means: every member of A is a member of B. Check A's members one by one. (Note: this is about ${SS.sub}, not ${SS.in}.)`,
+    mode:'mc', noKeyboard:true,
+    choices:[{text:'Yes',correct:isSub},{text:'No',correct:!isSub}],
+    explain:()=>isSub?`Yes — each of ${fmtSet(A)}'s members appears in B.`
+      :`No — ${fmtSet(A.filter(x=>!B.includes(x)))} ${A.filter(x=>!B.includes(x)).length===1?'is':'are'} in A but not in B.` };
+}
+function genS_pairs(opts){
+  const kind=pick(['prod','prod','count','incexc','pairfact']);
+  if(kind==='prod'){
+    const a=Math.random()<0.5 ? sampleDistinct(S_NAMES,1+rand(2)).sort()
+                              : sampleDistinct(['1','2','3'],1+rand(2)).sort();
+    const b=sampleDistinct(['x','y'],1+rand(2)).sort();
+    const prod=[]; for(const p of a) for(const q of b) prod.push(`(${p},${q})`);
+    const answer='{'+prod.join(', ')+'}';
+    const flipped='{'+a.flatMap(p=>b.map(q=>`(${q},${p})`)).join(', ')+'}';
+    const asSets='{'+a.flatMap(p=>b.map(q=>`{${p},${q}}`)).join(', ')+'}';
+    return { setLine:'Set S — Sets · Pairs & products',
+      prompt:`A = ${wff(fmtSet(a))} &nbsp; B = ${wff(fmtSet(b))}. Compute A ${SS.times} B.`,
+      instr:`A ${SS.times} B is the set of all ORDERED pairs (a,b) with a from A and b from B — first coordinate from the first set. |A ${SS.times} B| = |A|·|B|.`,
+      mode:opts.type?'type':'mc', noKeyboard:true, scratch:true,
+      choices:mc(answer,[
+        {text:flipped, why:`Those pairs run the wrong way — in A ${SS.times} B the FIRST coordinate comes from A.`},
+        {text:asSets,  why:`Those are two-member sets, not ordered pairs: {1,x} = {x,1}, but (1,x) ≠ (x,1). The product is built from ordered pairs.`}]),
+      answer, accept:acceptSet,
+      explain:()=>`A ${SS.times} B = ${wff(answer)} — ${a.length}·${b.length} = ${prod.length} pairs.` };
+  }
+  if(kind==='count'){
+    const m=2+rand(3), n=2+rand(3);
+    return { setLine:'Set S — Sets · Pairs & products',
+      prompt:`If |A| = ${m} and |B| = ${n}, what is |A ${SS.times} B|?`,
+      instr:`Each of the |A| choices of first coordinate combines with each of the |B| choices of second coordinate.`,
+      mode:opts.type?'type':'mc', noKeyboard:true,
+      choices:mc(String(m*n),[
+        {text:String(m+n), why:'That adds where you should multiply — every first coordinate pairs with every second coordinate.'},
+        {text:String(2**(m+n)), why:'That’s the size of a power set, not of a product.'},
+        String(m*n+n)]),
+      answer:String(m*n), accept:acceptNum,
+      explain:()=>`|A ${SS.times} B| = ${m}·${n} = ${m*n}.` };
+  }
+  if(kind==='incexc'){
+    const i=1+rand(3), onlyA=1+rand(4), onlyB=1+rand(4);
+    const a=onlyA+i, b=onlyB+i, u=onlyA+onlyB+i;
+    return { setLine:'Set S — Sets · Pairs & products',
+      prompt:`|A| = ${a}, |B| = ${b}, |A ${SS.cap} B| = ${i}. What is |A ${SS.cup} B|?`,
+      instr:`Inclusion–exclusion: |A ${SS.cup} B| = |A| + |B| − |A ${SS.cap} B| — adding |A| and |B| counts the overlap twice, so subtract it once.`,
+      mode:opts.type?'type':'mc', noKeyboard:true, scratch:true,
+      choices:mc(String(u),[
+        {text:String(a+b), why:'That counts the members of the overlap twice — subtract |A ∩ B| once.'},
+        {text:String(a+b-2*i), why:'You subtracted the overlap twice; it was only double-counted once.'},
+        String(u+1)]),
+      answer:String(u), accept:acceptNum,
+      explain:()=>`|A ${SS.cup} B| = ${a} + ${b} − ${i} = ${u}.` };
+  }
+  return sPairFact();
+}
+// pairfact: fixed conceptual items
+const S_PAIRFACT=[
+    {q:`(1,2) = (2,1) — true or false?`, a:`False — ordered pairs care about order; (a,b) = (c,d) only when a = c and b = d`,
+     d:[{text:`True — a pair is just a two-member collection`,why:`That's the SET {1,2}, which does equal {2,1}. Pairs are ordered precisely so that (1,2) ≠ (2,1).`}]},
+    {q:`{1,2} = {2,1} — true or false?`, a:`True — a set is fixed by its members alone; order is irrelevant`,
+     d:[{text:`False — the elements are listed in a different order`,why:`Order matters for ordered pairs, not for sets — extensionality says same members, same set.`}]},
+    {q:`In general, does A ${SS.times} B = B ${SS.times} A?`, a:`No — the pairs point in opposite directions (unless A = B, or one of them is empty)`,
+     d:[{text:`Yes — both contain the same coordinates`,why:`(a,b) ${SS.in} A ${SS.times} B but (a,b) ${SS.in} B ${SS.times} A would need a ${SS.in} B and b ${SS.in} A. Same coordinates, different pairs.`}]},
+    {q:`A relation from A to B is, in set-theoretic terms:`, a:`a subset of A ${SS.times} B — the set of pairs it relates`,
+     d:[{text:`a member of A ${SS.times} B`,why:`A single pair is one member; a relation collects all the pairs it relates, so it's a SUBSET of the product.`},
+        {text:`a function from A to B`,why:`Backwards — a function is a special relation (one output per input), not the other way round.`}]},
+    {q:`A function f from A to B is a relation such that:`, a:`each member of A is paired with exactly one member of B`,
+     d:[{text:`each member of B is paired with exactly one member of A`,why:`That would make the INVERSE a function. A function gives one output per input — one B-member per A-member.`},
+        {text:`no two members of A get the same value`,why:`That's what makes a function one-to-one (injective) — an extra property, not part of being a function.`}]},
+];
+function sPairFact(){
+  const f=deckPick(S_PAIRFACT);
+  return { setLine:'Set S — Sets · Pairs & products', prompt:f.q,
+    instr:`(a,b) is ordered; {a,b} is not. A relation is a set of ordered pairs; a function is a relation with exactly one output per input.`,
+    mode:'mc', noKeyboard:true, choices:mc(f.a,f.d), explain:()=>f.a+'.' };
+}
+const S_LAWS=[
+  {s:`${SS.empty} ${SS.sub} A, for every set A`, v:true,  why:`Vacuously true: A subset claim fails only if some member of the left set is missing from the right — and ${SS.empty} has no members to be missing.`},
+  {s:`${SS.empty} ${SS.in} A, for every set A`, v:false, why:`Membership isn't automatic: ${SS.empty} ${SS.in} A only if A happens to contain the empty set as a member — e.g. ${SS.empty} ${SS.in} {${SS.empty}} but ${SS.empty} ${SS.ni} {1,2}.`},
+  {s:`{${SS.empty}} = ${SS.empty}`, v:false, why:`{${SS.empty}} has one member (namely ${SS.empty}); ${SS.empty} has none. A bag containing an empty bag isn't empty.`},
+  {s:`A ${SS.sub} A, for every set A`, v:true, why:`Every member of A is a member of A. (That's why "proper subset," ${SS.psub}, exists as a separate notion.)`},
+  {s:`If A ${SS.sub} B and B ${SS.sub} C, then A ${SS.sub} C`, v:true, why:`Subsethood is transitive: chase any member of A through B into C.`},
+  {s:`If A ${SS.in} B and B ${SS.in} C, then A ${SS.in} C`, v:false, why:`Membership is NOT transitive: 1 ${SS.in} {1}, and {1} ${SS.in} {{1}}, but 1 ${SS.ni} {{1}} — its only member is {1}.`},
+  {s:`A = B if and only if A ${SS.sub} B and B ${SS.sub} A`, v:true, why:`Extensionality: sets with the same members are the same set — and mutual subsethood says exactly "same members."`},
+  {s:`{1, 2, 2, 3} = {1, 2, 3}`, v:true, why:`Listing a member twice adds nothing: a set is fixed by WHICH things are members, not by how often they're mentioned.`},
+  {s:`(A ${SS.cup} B)${SS.comp} = A${SS.comp} ${SS.cap} B${SS.comp}`, v:true, why:`De Morgan: to be outside a union is to be outside both sets.`},
+  {s:`(A ${SS.cap} B)${SS.comp} = A${SS.comp} ${SS.cup} B${SS.comp}`, v:true, why:`De Morgan: to be outside an intersection is to be outside at least one of the sets.`},
+  {s:`(A ${SS.cup} B)${SS.comp} = A${SS.comp} ${SS.cup} B${SS.comp}`, v:false, why:`De Morgan flips the operation: the complement of a union is the INTERSECTION of the complements.`},
+  {s:`A ${SS.cap} (B ${SS.cup} C) = (A ${SS.cap} B) ${SS.cup} (A ${SS.cap} C)`, v:true, why:`Distribution — mirror of "P and (Q or R)" ≡ "(P and Q) or (P and R)."`},
+  {s:`A ${SS.cup} (B ${SS.cap} C) = (A ${SS.cup} B) ${SS.cap} (A ${SS.cup} C)`, v:true, why:`Distribution works both ways for sets, just as for "and"/"or."`},
+  {s:`A ${SS.diff} B = B ${SS.diff} A, in general`, v:false, why:`Difference is directional: {1,2} ${SS.diff} {2} = {1}, but {2} ${SS.diff} {1,2} = ${SS.empty}.`},
+  {s:`A ${SS.sub} B if and only if A ${SS.cap} B = A`, v:true, why:`If all of A lies inside B, intersecting with B keeps all of A; conversely, if intersecting loses nothing, all of A was in B.`},
+  {s:`A ${SS.sub} B if and only if A ${SS.cup} B = B`, v:true, why:`Adding A to B adds nothing new exactly when A was already inside B.`},
+  {s:`A ${SS.sub} B if and only if A ${SS.diff} B = ${SS.empty}`, v:true, why:`A ${SS.diff} B collects A's members that are NOT in B — there are none exactly when A ${SS.sub} B.`},
+  {s:`A ${SS.cup} A${SS.comp} = U and A ${SS.cap} A${SS.comp} = ${SS.empty}`, v:true, why:`Everything in U is in A or out of it, and nothing is both — the set-shaped law of excluded middle and non-contradiction.`},
+  {s:`(A${SS.comp})${SS.comp} = A`, v:true, why:`Double complement cancels, like double negation.`},
+  {s:`|A ${SS.cup} B| = |A| + |B|, for all finite A, B`, v:false, why:`Only when A and B are disjoint — otherwise the overlap is counted twice. In general |A ${SS.cup} B| = |A| + |B| − |A ${SS.cap} B|.`},
+  {s:`A ${SS.in} P(B) if and only if A ${SS.sub} B`, v:true, why:`P(B)'s members are exactly B's subsets — this equivalence is the whole point of the power set.`},
+  {s:`P(${SS.empty}) = ${SS.empty}`, v:false, why:`P(${SS.empty}) = {${SS.empty}} — the empty set has exactly one subset, itself. Even "nothing" has a power set with something in it.`},
+  {s:`If A ${SS.sub} B, then P(A) ${SS.sub} P(B)`, v:true, why:`Any subset of A is automatically a subset of B, so it's in P(B) too.`},
+  {s:`{a} ${SS.in} {a, {a}}`, v:true, why:`{a, {a}} has two members: a, and {a}. So {a} is a member — and also a subset, since its only member a is in there. Both at once!`},
+];
+function genS_laws(opts){
+  const it=deckPick(S_LAWS);
+  return { setLine:'Set S — Sets · Laws', prompt:`True or false?<br>${wff(it.s)}`,
+    instr:`Test identities with a small example or a two-circle diagram in the scratch space. Watch the ${SS.in}/${SS.sub} distinction like a hawk.`,
+    mode:'tf', noKeyboard:true, scratch:true,
+    choices:[{text:'True',correct:it.v},{text:'False',correct:!it.v}],
+    explain:()=>`${it.v?'True':'False'}. ${it.why}` };
+}
+const S_BASICS_FIXED=[
+  {q:`Which is true of ${SS.empty} and {${SS.empty}}?`, a:`|${SS.empty}| = 0 and |{${SS.empty}}| = 1 — the second has the empty set as its one member`,
+   d:[{text:`They are the same set`,why:`Different members: ${SS.empty} has none, {${SS.empty}} has one (namely ${SS.empty}). By extensionality they differ.`},
+      {text:`Both are empty`,why:`{${SS.empty}} is not empty — it contains something, the empty set.`}]},
+  {q:`Is a ${SS.in} {a}? And is a = {a}?`, a:`a ${SS.in} {a}, but a ≠ {a} — a thing is never identical to its own singleton`,
+   d:[{text:`Both — braces around one thing change nothing`,why:`Braces change everything: {a} is a SET with one member. Socrates is a man; {Socrates} is a set. (If a = {a}, a set could be its own sole member — banned in standard set theory.)`}]},
+  {q:`Which set-builder description picks out {1, 3, 5, 7, 9}?`, a:`{x : x is an odd number and x < 10}`,
+   d:[{text:`{x : x is a number and x < 10}`,why:`That includes the evens too.`},
+      {text:`{x : x is an odd number}`,why:`Right start, but nothing stops it at 9 — set-builder needs the whole condition.`}]},
+  {q:`How many members has {${SS.empty}, {${SS.empty}}}?`, a:`2 — the empty set, and the singleton of the empty set`,
+   d:[{text:`0`,why:`It plainly contains things — two of them.`},{text:`1`,why:`${SS.empty} and {${SS.empty}} are different sets (0 vs 1 members), so they count as two members.`}]},
+  {q:`"The set of prime numbers between 24 and 28" is:`, a:`${SS.empty} — a perfectly good set with no members (25 = 5·5, 26 = 2·13, 27 = 3³)`,
+   d:[{text:`not a set at all`,why:`An unsatisfiable condition still defines a set — the empty one. There is exactly one empty set.`},
+      {text:`{25, 27}`,why:`25 and 27 aren't prime.`}]},
+  {q:`How many different empty sets are there?`, a:`Exactly one — sets with the same members are identical, and all empty sets have the same members (none)`,
+   d:[{text:`One per kind of thing (an empty set of numbers, an empty set of people…)`,why:`Tempting, but extensionality forbids it: with no members, there's nothing to tell them apart, so they're one set.`}]},
+  {q:`A = {n : n is a natural number}. Is A finite?`, a:`No — for any candidate largest member there's a larger one`,
+   d:[{text:`Yes — every particular natural number is finite`,why:`Each MEMBER is finite, but the SET of all of them is infinite. Don't confuse properties of members with properties of the set.`}]},
+];
+/* freshly generated membership/notation problems, built around people's names */
+function sBasicsGen(){
+  const [n1,n2,n3,n4]=sampleDistinct(S_NAMES,4);
+  const kind=pick(['nestIn','nestSetIn','nestCard','inout','ext','roster','both']);
+  if(kind==='nestIn') return {
+    q:`A = ${wff(`{${n1}, {${n2}}, ${n3}}`)} &nbsp; Is ${n2} ${SS.in} A?`,
+    a:`No — A's members are ${n1}, the set {${n2}}, and ${n3}; ${n2} is not one of them`,
+    d:[{text:`Yes — ${n2} appears inside A`,why:`${n2} appears inside a MEMBER of A (the set {${n2}}), but membership doesn't reach inside members: {${n2}} ${SS.in} A, while ${n2} ${SS.ni} A.`},
+       {text:`Yes — whatever is inside a member is in the set`,why:`Membership is not transitive: being in {${n2}} does not put ${n2} in A itself.`}]};
+  if(kind==='nestSetIn') return {
+    q:`A = ${wff(`{${n1}, {${n2}}, ${n3}}`)} &nbsp; Is ${wff(`{${n2}}`)} ${SS.in} A?`,
+    a:`Yes — the set {${n2}} is listed as one of A's three members`,
+    d:[{text:`No — sets can't be members of sets`,why:`They can: A's members are ${n1}, the SET {${n2}}, and ${n3}. Sets containing sets are routine.`},
+       {text:`No — only ${n2} is in A, not {${n2}}`,why:`The reverse: ${n2} ${SS.ni} A, but the set {${n2}} IS a member of A. Braces matter.`}]};
+  if(kind==='nestCard') return {
+    q:`A = ${wff(`{${n1}, {${n2}, ${n3}}, ${n4}}`)} &nbsp; What is |A|?`,
+    a:`3 — the members are ${n1}, the set {${n2}, ${n3}}, and ${n4}`,
+    d:[{text:`4`,why:`Don't count ${n2} and ${n3} separately — they're sealed inside the single member {${n2}, ${n3}}.`},
+       {text:`2`,why:`The set {${n2}, ${n3}} counts as one member — alongside ${n1} and ${n4}, that's three.`}]};
+  if(kind==='inout') return {
+    q:`B = ${wff(`{${n1}, ${n2}}`)} &nbsp; Which is correct?`,
+    a:`{${n1}} ${SS.sub} B and ${n1} ${SS.in} B`,
+    d:[{text:`{${n1}} ${SS.in} B and ${n1} ${SS.sub} B`,why:`Backwards on both: B's members are ${n1} and ${n2} (so ${n1} ${SS.in} B), and {${n1}} is a SUBSET because its one member is in B. {${n1}} would be a MEMBER only of a set like {{${n1}}, ${n2}}.`},
+       {text:`${n1} ${SS.sub} B`,why:`Subsethood relates sets to sets; ${n1} is a person, not a set. ${n1} ${SS.in} B is the right claim.`}]};
+  if(kind==='ext'){
+    if(Math.random()<0.5) return {
+      q:`Are ${wff(`{${n1}, ${n2}}`)} and ${wff(`{${n2}, ${n1}, ${n1}}`)} the same set?`,
+      a:`Yes — same members, same set: order and repetition don't matter`,
+      d:[{text:`No — the second lists three things`,why:`It MENTIONS three, but it has two members: ${n1} and ${n2}. Listing ${n1} twice adds nothing (extensionality).`},
+         {text:`No — the order differs`,why:`Order is irrelevant to sets — a set is fixed by WHICH things are members, nothing more.`}]};
+    return {
+      q:`Are ${wff(`{${n1}, ${n2}}`)} and ${wff(`{${n1}, ${n3}}`)} the same set?`,
+      a:`No — ${n2} is in the first but not the second: different members, different sets`,
+      d:[{text:`Yes — both are two-member sets containing ${n1}`,why:`Same SIZE and an overlap isn't sameness: extensionality demands exactly the same members, and ${n2} isn't ${n3}.`}]};
+  }
+  if(kind==='roster'){
+    const par=pick(['even','odd']); const lo=pick([1,2,3]); const hi=lo+6+rand(4);
+    const S=[]; for(let x=lo+1;x<hi;x++) if((x%2===0)===(par==='even')) S.push(x);
+    const ans=fmtSet(S.map(String));
+    const missLast=fmtSet(S.slice(0,-1).map(String));
+    const extra=fmtSet(S.concat([S[S.length-1]+1]).map(String));
+    const wrongPar=fmtSet(Array.from({length:hi-lo-1},(_,k)=>lo+1+k).filter(x=>(x%2===0)!==(par==='even')).map(String));
+    return {
+      q:`{x : x is an ${par} number and ${lo} < x < ${hi}} in roster notation is:`,
+      a:ans,
+      d:[{text:missLast,why:`Check the top of the range — one more number satisfies the condition.`},
+         {text:extra,why:`The largest member listed fails the condition — check parity and the bound ${hi}.`},
+         {text:wrongPar,why:`Those are the ${par==='even'?'odd':'even'} numbers in that range — the condition says ${par}.`}]};
+  }
+  // both: ∈ and ⊆ at once
+  return {
+    q:`C = ${wff(`{${n1}, {${n1}}}`)} &nbsp; Which is true?`,
+    a:`{${n1}} ${SS.in} C and {${n1}} ${SS.sub} C — it's a member, and also a subset, since its one member ${n1} is in C`,
+    d:[{text:`only {${n1}} ${SS.in} C`,why:`It's ALSO a subset: {${n1}}'s only member, ${n1}, is a member of C — so {${n1}} ${SS.sub} C too. Both hold at once here.`},
+       {text:`only {${n1}} ${SS.sub} C`,why:`It's ALSO a member — C lists {${n1}} inside its braces. Both hold at once here.`}]};
+}
+function genS_basics(opts){
+  const it=Math.random()<0.6 ? sBasicsGen() : deckPick(S_BASICS_FIXED);
+  return { setLine:'Set S — Sets · Membership & notation', prompt:it.q,
+    instr:`${SS.in} says "is a member of"; ${SS.sub} says "every member of the first is a member of the second." Braces build a set out of whatever is listed — including other sets. ${SS.empty} = the set with no members.`,
+    mode:'mc', noKeyboard:true, choices:mc(it.a,it.d), explain:()=>it.a+'.' };
+}
+const S_INF=[
+  {q:`Two sets are "equinumerous" (the same size) when:`,
+   a:`there is a one-to-one correspondence pairing each member of one with exactly one member of the other, none left over`,
+   d:[{text:`they have the same members`,why:`Same members makes them the same SET. Same size is weaker — {1,2} and {a,b} differ in members but match in size.`},
+      {text:`counting them gives the same number`,why:`Counting works only for finite sets. Correspondence is the definition that still makes sense for infinite sets — that's Cantor's key move.`},
+      {text:`each is a subset of the other`,why:`Mutual subsethood is identity (extensionality), not sameness of size.`}]},
+  {q:`The set of even natural numbers, compared with the set of ALL natural numbers, is:`,
+   a:`the same size — n ↦ 2n pairs the naturals with the evens exactly`,
+   d:[{text:`half the size`,why:`Finite intuition. For infinite sets, a proper subset can be equinumerous with the whole — that's practically the definition of "infinite."`},
+      {text:`smaller, though both are infinite`,why:`The pairing 0↔0, 1↔2, 2↔4, 3↔6, … leaves nothing out on either side, so the sizes are equal.`},
+      {text:`impossible to compare`,why:`Cantor's insight is that one-to-one correspondence DOES compare infinite sizes, and here it delivers a clear verdict: equal.`}]},
+  {q:`Hilbert's Hotel has infinitely many rooms, all full. A new guest arrives. The manager:`,
+   a:`moves each guest from room n to room n+1, freeing room 1 — an infinite hotel that's full can still take more`,
+   d:[{text:`must turn the guest away — full is full`,why:`For FINITE hotels. The shift n ↦ n+1 relocates every current guest and opens room 1: full-but-roomy is the signature of the infinite.`},
+      {text:`needs to build one more room`,why:`No construction needed — rearrangement alone frees a room.`}]},
+  {q:`The set of integers (…, −2, −1, 0, 1, 2, …) is:`,
+   a:`countable — list them 0, 1, −1, 2, −2, 3, −3, … and every integer shows up at some finite position`,
+   d:[{text:`uncountable — it stretches to infinity in two directions`,why:`Direction doesn't matter; having SOME complete list does. Interleaving positives and negatives gives one.`},
+      {text:`twice the size of the natural numbers`,why:`"Twice ℵ₀" is still ℵ₀ — the interleaved list is a bijection with ℕ.`}]},
+  {q:`The rational numbers (all fractions) are:`,
+   a:`countable — arrange fractions in a grid by numerator and denominator and snake through it diagonally, skipping repeats`,
+   d:[{text:`uncountable — between any two rationals there's another`,why:`Density feels overwhelming but doesn't block listing: the diagonal walk through the grid reaches every fraction at a finite step. Density ≠ uncountability.`},
+      {text:`the same size as the real numbers`,why:`Strictly smaller: ℚ is countable, and Cantor's diagonal argument shows ℝ is not.`}]},
+  {q:`Cantor's diagonal argument shows the real numbers are uncountable. The core move: given ANY infinite list of reals,`,
+   a:`build a real that differs from the n-th listed number at the n-th decimal place — so it's missing from the list, and no list is complete`,
+   d:[{text:`show the list must repeat itself eventually`,why:`Nothing forces repetition. The argument constructs a MISSING number instead.`},
+      {text:`show some real numbers can't be described`,why:`The diagonal number is described perfectly well — what fails is only its presence on the given list.`},
+      {text:`derive a contradiction from the axioms of arithmetic`,why:`No contradiction in arithmetic — just a refutation of the assumption "this list contains every real."`}]},
+  {q:`In the diagonal argument, the constructed number:`,
+   a:`is a perfectly good real number — its crime is only that it differs from every entry on the given list`,
+   d:[{text:`is not a genuine real number`,why:`It has a decimal digit at every place — as genuine as any real. Denying its reality is the classic wrong escape route.`},
+      {text:`appears further down the list`,why:`It can't: it differs from entry n at digit n, for EVERY n.`}]},
+  {q:`Cantor's theorem says: for EVERY set A,`,
+   a:`|A| < |P(A)| — the power set is always strictly bigger, so there is an endless ladder of infinite sizes`,
+   d:[{text:`|P(A)| = 2·|A|`,why:`For finite sets |P(A)| = 2^|A| (exponent, not product) — and the theorem's punch is that P(A) outruns A even when A is infinite.`},
+      {text:`every infinite set is the same size`,why:`The exact opposite of the theorem: P(ℕ) is strictly bigger than ℕ, P(P(ℕ)) bigger still, without end.`}]},
+  {q:`ℵ₀ (aleph-null) names:`,
+   a:`the size of the natural numbers — the smallest infinite size`,
+   d:[{text:`the largest infinite number`,why:`There is no largest: Cantor's theorem manufactures a bigger size from any given one.`},
+      {text:`the size of the real numbers`,why:`ℝ is strictly bigger than ℵ₀ — that's what the diagonal argument establishes. The reals' size is called the cardinality of the continuum.`}]},
+  {q:`The continuum hypothesis (CH) conjectures:`,
+   a:`no set is strictly bigger than ℕ yet strictly smaller than ℝ`,
+   d:[{text:`the real numbers are countable`,why:`Refuted by the diagonal argument. CH is about whether anything sits strictly BETWEEN ℕ and ℝ in size.`},
+      {text:`every infinite set is the size of ℕ or of ℝ`,why:`Close, but CH concerns only the gap between ℕ and ℝ — Cantor's ladder keeps climbing above ℝ regardless.`}]},
+  {q:`What did Gödel (1940) and Cohen (1963) together show about the continuum hypothesis?`,
+   a:`the standard axioms of set theory can neither refute it (Gödel) nor prove it (Cohen) — CH is independent of them`,
+   d:[{text:`that it is true`,why:`Neither proved it — Gödel showed the axioms can't refute it; Cohen showed they can't prove it either.`},
+      {text:`that it is meaningless`,why:`Independence is a precise mathematical status, not meaninglessness — though philosophers dispute what it tells us about truth.`}]},
+  {q:`Russell's paradox concerns R = {x : x is not a member of itself}. The problem:`,
+   a:`R ${SS.in} R if and only if R ${SS.ni} R — a contradiction either way`,
+   d:[{text:`R turns out to be empty`,why:`If R were empty, then R ${SS.ni} R, so R would satisfy its own defining condition and belong to R after all — the contradiction, not emptiness.`},
+      {text:`R is simply too large to be a set`,why:`That's a DIAGNOSIS offered by later set theory (limitation of size), not the paradox itself. The paradox is the flat contradiction.`}]},
+  {q:`The moral standardly drawn from Russell's paradox:`,
+   a:`naive comprehension — "every condition determines a set" — must be abandoned; axiomatic set theory restricts how sets may be formed`,
+   d:[{text:`mathematics is inconsistent`,why:`The contradiction springs from one naive principle, not from mathematics — ZF-style theories drop it and no paradox has surfaced there.`},
+      {text:`the notion of a set is incoherent`,why:`Too strong: restricted set formation (e.g. separating subsets from a GIVEN set) works smoothly.`},
+      {text:`some sets both are and are not members of themselves`,why:`Nothing true is a contradiction; the conclusion is that R does not exist as a set.`}]},
+  {q:`A set is INFINITE, on Dedekind's elegant definition, exactly when:`,
+   a:`it can be put in one-to-one correspondence with a proper part of itself`,
+   d:[{text:`it has more than a trillion members`,why:`Any fixed bound leaves a finite set. Dedekind's mark: the whole matches a proper part — as ℕ matches the evens.`},
+      {text:`its members go on without repeating`,why:`Vague — the correspondence-with-a-part criterion is the precise version of that intuition.`}]},
+  {q:`Which pair differs in size?`,
+   a:`ℕ and ℝ`,
+   d:[{text:`ℕ and ℤ`,why:`Same size — interleave positives and negatives.`},
+      {text:`ℕ and ℚ`,why:`Same size — snake diagonally through the grid of fractions.`},
+      {text:`ℕ and the even numbers`,why:`Same size — pair n with 2n.`}]},
+  {q:`P(ℕ), the set of ALL sets of natural numbers, is:`,
+   a:`uncountable — by Cantor's theorem it is strictly bigger than ℕ itself`,
+   d:[{text:`countable, since ℕ is`,why:`Cantor's theorem says the power set ALWAYS outruns the set: no list of sets of naturals can be complete (diagonalize: build the set of n's not in the n-th listed set).`},
+      {text:`the same size as ℕ`,why:`Strictly bigger — in fact P(ℕ) is the size of ℝ.`}]},
+];
+function genS_inf(opts){
+  const it=deckPick(S_INF);
+  return { setLine:'Set S — Sets · Infinity', prompt:it.q,
+    instr:`One idea runs through all of this: sizes are compared by one-to-one correspondence, not by counting. Everything else — countability, the diagonal argument, Cantor's theorem — unfolds from it.`,
+    mode:'mc', noKeyboard:true, scratch:true, choices:mc(it.a,it.d), explain:()=>it.a+'.' };
+}
+
+/* ================= SET T — FORMAL LANGUAGES & METATHEORY ================= */
+/* Study card shown at the top of Set T's menu */
+function tStudyCard(){
+  return `<div class="study-card">
+    <p class="lead">This topic isn’t in Gensler; the notes below are the whole toolkit for Set T. Skim them, then pick an activity. The discipline is keeping syntax, semantics, and metalanguage talk carefully separated.</p>
+
+    <h3>Use versus mention</h3>
+    <p>When you use a word, you talk about the world; when you mention it, you talk about the expression itself. Boston is a city — that uses the name. ‘Boston’ has six letters — that mentions the word, marked by quotation. Confusing use with mention is a standard source of fallacies about language.</p>
+
+    <h3>Object language and metalanguage</h3>
+    <p>The <b>object language</b> is the language under study; the <b>metalanguage</b> is the language in which we study it. A formula such as (A ${SYM.and} B) belongs to the object language. Claims like “is a wff,” “is valid,” and the turnstile ⊢ are metalanguage. Keeping the two levels straight is the first habit of metatheory.</p>
+
+    <h3>What a formal language is</h3>
+    <p>A formal language is an alphabet plus formation rules — and nothing else. Meanings come later, with an interpretation. With the usual grammar, (A ${SYM.and} B) is a well-formed formula (wff), while A ${SYM.and} ${SYM.and} B is not: no rule licenses two connectives in a row without a formula between them.</p>
+
+    <h3>Syntax versus semantics</h3>
+    <p><b>Syntax</b> is about shape and rules: wff, main connective, proof, derivability (⊢). <b>Semantics</b> is about truth under interpretations: tautology, validity, logical consequence (⊨). A string can be perfectly grammatical and still be false under some assignment; a claim can be true under every assignment without our having written a proof yet. The subject thrives on studying how the two columns correspond.</p>
+
+    <h3>Soundness and completeness</h3>
+    <p>Soundness says: if you can prove A (⊢ A), then A is valid (⊨ A) — the proof system never lies. Completeness says the converse: if A is valid (⊨ A), then there is a proof (⊢ A) — the system can, in principle, capture every valid claim. Together they say that for the logic in question, ⊢ and ⊨ mark the same class of formulas.</p>
+
+    <h3>Decidability</h3>
+    <p>A question is <b>decidable</b> when there is an algorithm that always answers it correctly in finitely many steps. Propositional validity is decidable — truth tables (or equivalent methods) settle every case. Full quantificational validity is not: Church’s theorem says no algorithm decides validity for first-order logic in general.</p>
+
+    <h3>Gödel’s two landmark results</h3>
+    <p>In 1930 Gödel proved that standard first-order logic is complete: every valid formula has a proof. In 1931 he proved that sufficiently strong theories of arithmetic are incomplete: no consistent recursively axiomatized extension of basic arithmetic decides every arithmetic sentence. Completeness of <em>logic</em> and incompleteness of <em>arithmetic theories</em> are different theorems; both are central to metatheory.</p>
+
+    <h3>Regimented English</h3>
+    <p>Ordinary English hides quantifier scope. A regimented paraphrase pulls quantifier phrases to the front with “is such that,” so pronouns act like bound variables. “Every critic is such that some book is such that he reviewed it” lets the book depend on the critic; “Some book is such that every critic is such that he reviewed it” fixes one book for all critics. Same words, different logical forms — Montague and Klima made this regimentation a bridge between English and formal language.</p>
+  </div>`;
+}
+/* Study-card panel opened from the Set S / Set T activity menus */
+function openStudyPanel(setId, study){
+  openModal(`<button class="close" onclick="openSetMenu('${setId}')" title="Close">×</button>
+    <h2 style="margin-right:28px">${study.label}</h2>
+    ${study.body()}`);
+}
+window.openStudyPanel=openStudyPanel;
+function genT(opts){
+  const m=state.tMode||'lang';
+  return m==='gram'?genT_gram(opts):m==='sem'?genT_sem(opts):m==='meta'?genT_meta(opts)
+       :m==='reg'?genT_reg(opts):genT_lang(opts);
+}
+function tBankItem(bank, setLine, instr){
+  const it=deckPick(bank);
+  return { setLine, prompt:it.q, instr:it.instr||instr, mode:'mc', noKeyboard:true,
+    choices:mc(it.a, it.d), explain:()=>it.x||it.a+'.' };
+}
+/* random wff AST over given letters */
+function tRandAst(depth, letters){
+  letters=letters||['A','B','C'];
+  if(depth<=0||(depth<2&&Math.random()<0.4)) return {op:'var',name:pick(letters)};
+  if(Math.random()<0.28) return {op:'~',a:tRandAst(depth-1,letters)};
+  return {op:pick(['&','|','>','=']), a:tRandAst(depth-1,letters), b:tRandAst(rand(depth),letters)};
+}
+function tSubAsts(f,out){ out=out||[]; out.push(f); if(f.a)tSubAsts(f.a,out); if(f.b)tSubAsts(f.b,out); return out; }
+/* Strict grammar check on a DISPLAYED string, in whatever notation is active.
+   W ::= CAPITAL | not W | ( W binary W ) — and nothing else. Deliberately
+   stricter than parseProp (which tolerates missing parentheses), because here
+   the question IS whether the string is well-formed. */
+function tStrictWff(disp){
+  const map={}; map[SYM.not]='~'; map[SYM.and]='&'; map[SYM.or]='|';
+  map[SYM.horseshoe]='>'; map[SYM.threebar]='=';
+  const s=[...String(disp).replace(/\s+/g,'')].map(c=>map[c]||c).join('');
+  let i=0;
+  function W(){
+    const c=s[i];
+    if(c===undefined) return false;
+    if(/[A-Z]/.test(c)){ i++; return true; }
+    if(c==='~'){ i++; return W(); }
+    if(c==='('){
+      i++;
+      if(!W()) return false;
+      if(!'&|>='.includes(s[i])) return false;
+      i++;
+      if(!W()) return false;
+      if(s[i]!==')') return false;
+      i++; return true;
+    }
+    return false;
+  }
+  return W() && i===s.length;
+}
+
+const T_LANG=[
+  {q:`Which of these is true?`,
+   a:`'Boston' has six letters`,
+   d:[{text:`Boston has six letters`,why:`Without quotes you're talking about the city — and cities don't have letters. To say something about the WORD, quote it.`},
+      {text:`'Boston' is a large city`,why:`With quotes you're talking about the word — and words aren't cities. Use the name unquoted to talk about the city.`}],
+   x:`'Boston' (in quotes) names the word, which has six letters; Boston (no quotes) is the city. Quotation forms a name of an expression — the standard device for MENTIONING rather than USING it.`},
+  {q:`The object language / metalanguage distinction:`,
+   a:`the object language is the language under study; the metalanguage is the language in which we study it`,
+   d:[{text:`the object language is about objects; the metalanguage is about ideas`,why:`Nothing to do with subject matter — it's about which language is being TALKED ABOUT and which is doing the talking.`},
+      {text:`the metalanguage must be a formal language`,why:`Usually it's the opposite: the object language is formal and the metalanguage is ordinary English (plus some mathematics).`}],
+   x:`When this app states rules ABOUT wffs in English, the wff-language is the object language and English is the metalanguage.`},
+  {q:`Which of these belong to the METALANGUAGE rather than the object language of propositional logic?`,
+   a:`"is a wff," "is valid," "⊢" — vocabulary for talking about the formulas`,
+   d:[{text:`the sentence letters A, B, C`,why:`Those are the object language's own vocabulary — the things talked about.`},
+      {text:`the parentheses`,why:`Parentheses are object-language symbols, part of wffs themselves.`}],
+   x:`Anything used to describe or evaluate the formulas — "wff," "valid," "provable," "⊢," "⊨" — is metalanguage.`},
+  {q:`When a rule is stated as "from (P • Q) infer P," the letters P and Q are:`,
+   a:`metavariables — metalanguage letters standing for arbitrary wffs of the object language`,
+   d:[{text:`two particular sentence letters of the object language`,why:`Then the rule would only apply to the single wff (P • Q). It applies to (A • B), ((C ∨ D) • E), … because P, Q range over ALL wffs.`},
+      {text:`abbreviations for English sentences`,why:`They abbreviate nothing — they're variables in the metalanguage ranging over object-language formulas.`}],
+   x:`Rule statements are metalanguage generalizations about infinitely many object-language wffs — that's what metavariables achieve.`},
+  {q:`A formal language, strictly speaking, is defined by:`,
+   a:`an alphabet of symbols plus formation rules saying which strings of them are well-formed — nothing more`,
+   d:[{text:`an alphabet, formation rules, and the meanings of the symbols`,why:`Meanings come later, with an interpretation — the LANGUAGE itself is pure syntax. That's what lets us study it mathematically.`},
+      {text:`a dictionary and a grammar`,why:`A dictionary assigns meanings; a bare formal language has none until semantics is added.`}],
+   x:`Language = alphabet + grammar. Interpretation is a further, separable step — the separation is the deep idea.`},
+  {q:`The distinction between a sentence TYPE and its TOKENS:`,
+   a:`the type is the repeatable pattern; a token is a particular physical inscription or utterance of it`,
+   d:[{text:`types are written, tokens are spoken`,why:`Both written inscriptions and utterances are tokens; the type is what they're all instances of.`},
+      {text:`a type is a kind of token found in formal languages only`,why:`English has types and tokens too — "the cat saw the cat" has 5 word tokens of 4 word types.`}],
+   x:`Logic's laws are about types; ink and sound provide the tokens.`},
+  {q:`Why do logicians bother with quotation marks when stating facts about expressions?`,
+   a:`to form a NAME of the expression — otherwise the sentence would use the expression and talk about whatever it refers to`,
+   d:[{text:`for emphasis`,why:`Quotation here is a naming device, not typography: 'snow' names a four-letter word.`},
+      {text:`because expressions cannot appear inside sentences`,why:`They appear constantly — the issue is whether they're USED (doing their normal job) or MENTIONED (being talked about).`}],
+   x:`Confusing use with mention collapses claims about words into claims about things — the source of many classical fallacies and paradoxes.`},
+  {q:`Which sentence commits a use–mention confusion?`,
+   a:`Chicago has seven letters`,
+   d:[{text:`'Chicago' has seven letters`,why:`Correct as it stands — the quoted name names the word.`},
+      {text:`Chicago has almost three million residents`,why:`Correct — the unquoted name is used, and the claim is about the city.`}],
+   x:`Cities don't have letters; words do. The claim needs quotes: 'Chicago' has seven letters.`},
+  {q:`Tarski argued that, on pain of paradox, a truth predicate for a language should live in:`,
+   a:`a richer metalanguage — the language itself cannot consistently contain its own unrestricted truth predicate`,
+   d:[{text:`the language itself, since speakers apply "true" to their own sentences`,why:`That's what generates the liar ("this sentence is false"). Tarski's hierarchy blocks it: truth-for-L is defined one level up.`},
+      {text:`no language — truth is indefinable`,why:`Tarski showed truth for a given object language IS rigorously definable — in its metalanguage.`}],
+   x:`The liar paradox is the pressure; the object/metalanguage hierarchy is Tarski's release valve.`},
+  {q:`Ordinary English serves as its own metalanguage ("the word 'dog' has three letters"). For formal work logicians still separate the two because:`,
+   a:`a sharp separation gives an exact, paradox-free setting for proving things ABOUT the language`,
+   d:[{text:`English is not really a language`,why:`It is — the point is methodological control, not a defect in English's status.`},
+      {text:`object languages are always incomplete`,why:`Incompleteness is a property of certain theories (a later topic), not the reason for the object/meta distinction.`}],
+   x:`Self-application is where paradox breeds; regimenting WHO talks about WHOM keeps the metatheory clean.`},
+];
+/* live-generated use/mention item: quoting names the word */
+const T_MENTION_WORDS=['logic','proof','valid','snow','seven','Aristotle','symbol','premise','table','quantifier'];
+function tMentionItem(){
+  const w=deckPick(T_MENTION_WORDS);
+  const n=w.length;
+  const d=[{text:`${w} has ${n} letters`,
+            why:`Use–mention: unquoted, you're talking about the thing, not the word. The WORD is what has letters, so quote it.`},
+           {text:`'${w}' has ${n-1} letters`,
+            why:`Count again — the quoted word has ${n}.`}];
+  if(w==='seven') d.push({text:`seven has five letters`,
+    why:`Numbers don't have letters; the WORD does — quote it.`});
+  return { setLine:'Set T — Formal Languages · Language & metalanguage',
+    prompt:`${w} / '${w}' — which of these is true?`,
+    instr:`Quotation makes a NAME of an expression. Unquoted, the expression is used and the claim is about what it refers to; quoted, it is mentioned and the claim is about the expression itself.`,
+    mode:'mc', noKeyboard:true,
+    choices:mc(`'${w}' has ${n} letters`, d),
+    explain:()=>`Quoting names the word: '${w}' has ${n} letters. Unquoted, ${w} is used — and the thing it refers to has no letters at all.` };
+}
+function genT_lang(opts){
+  if(Math.random()<0.3) return tMentionItem();
+  return tBankItem(T_LANG,'Set T — Formal Languages · Language & metalanguage',
+    `Use an expression to do its normal job; mention it — with quotes — to talk about the expression itself. "Wff," "valid," "⊢": metalanguage. Sentence letters, connectives, parentheses: object language.`);
+}
+
+function tGrammarBox(){
+  return `<div class="muted" style="font-size:13px;margin:8px 0;border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+    <b>The grammar.</b> 1. Any capital letter is a wff. &nbsp;2. The result of prefixing ${SYM.not} to a wff is a wff.
+    &nbsp;3. The result of joining two wffs with ${SYM.and}, ${SYM.or}, ${SYM.horseshoe}, or ${SYM.threebar} and enclosing the result in parentheses is a wff.
+    &nbsp;<i>Nothing else is a wff.</i></div>`;
+}
+const T_GRAM_FIXED=[
+  {q:`The clause "nothing else is a wff" does real work: it guarantees that`,
+   a:`the wffs are EXACTLY the strings the rules generate — so properties can be proved of all wffs by induction on the rules`,
+   d:[{text:`the language stays small enough to be useful`,why:`The language is infinite anyway. The closure clause fixes membership exactly, which is what proofs by induction need.`},
+      {text:`no new connectives may ever be added`,why:`One may define richer languages freely; the clause closes THIS language's membership, nothing more.`}],
+   x:`This closure clause is what makes "prove it for the letters, preserve it through rules 2 and 3, conclude it for every wff" a valid argument form — structural induction.`},
+  {q:`Claim: every wff has equal numbers of left and right parentheses. The BASE CASE of the induction proves it for:`,
+   a:`the sentence letters — which contain zero of each`,
+   d:[{text:`the shortest formula containing parentheses`,why:`The base case handles the wffs the rules START from — letters — not the shortest parenthesized wff.`},
+      {text:`the empty string`,why:`The empty string isn't a wff at all; induction starts from clause 1's letters.`}],
+   x:`Base: letters have 0 and 0. Induction: rule 2 adds no parentheses; rule 3 adds one of each. Closure: every wff is reached this way. Hence balance always.`},
+  {q:`Same claim, the INDUCTION STEP: assuming the parts are balanced, show the whole is. Rule 3 preserves balance because:`,
+   a:`it adds exactly one left and one right parenthesis around already-balanced parts`,
+   d:[{text:`parentheses always come in pairs in mathematics`,why:`That's the thing being PROVED — an induction step can't just assert it.`},
+      {text:`rule 3 adds no parentheses`,why:`That's rule 2 (negation). Rule 3 adds one of each — which is why balance survives.`}],
+   x:`Each rule application keeps the ledger even; the closure clause says there's no other way to be a wff. This is the simplest real metatheorem — a proof ABOUT the language, in the metalanguage.`},
+  {q:`"Unique readability" is the metatheorem that every wff:`,
+   a:`can be built by the formation rules in exactly one way — so it has one main connective and one parse`,
+   d:[{text:`can be read aloud unambiguously`,why:`Pronunciation isn't the point; unique STRUCTURE is — one construction tree per wff.`},
+      {text:`contains no ambiguous words`,why:`Formal symbols aren't the issue; the theorem rules out structural (grouping) ambiguity, the formal analogue of amphiboly.`}],
+   x:`Compare English "old men and women," which parses two ways. The parentheses of rule 3 make that impossible here — that's a designed-in feature, and it's provable.`},
+];
+/* Is this string a wff? Half the time yes; otherwise one targeted mutation. */
+function tWffOrNot(ast,good){
+  const YES='Yes — a wff', NO='No — not a wff';
+  const instr=`Check it against the three clauses — can the string be built by them, in some order, with nothing left over?`;
+  const box=tGrammarBox();
+  if(Math.random()<0.5){
+    return { setLine:'Set T — Formal Languages · Grammar & wffs',
+      prompt:box+`Is this string a wff of the language?<br>`+wff(good),
+      instr, mode:'mc', noKeyboard:true,
+      choices:[{text:YES,correct:true},
+               {text:NO,correct:false,why:`It parses cleanly: every parenthesis pair encloses a binary compound, every connective has a wff on each side, and every letter is a capital.`}],
+      explain:()=>`${wff(good)} is a wff — it is built by the rules, ${ast.op==='var'?'clause 1 alone':ast.op==='~'?`the last step prefixing ${SYM.not} (clause 2)`:'the last step joining two wffs inside parentheses (clause 3)'}.` };
+  }
+  const symOf={'~':SYM.not,'&':SYM.and,'|':SYM.or,'>':SYM.horseshoe,'=':SYM.threebar};
+  const binOf=f=>symOf[f.op];
+  const muts=[];
+  // dropParen — delete one random parenthesis
+  const parenIdx=[...good].map((c,i)=>(c==='('||c===')')?i:-1).filter(i=>i>=0);
+  if(parenIdx.length){
+    const i=pick(parenIdx);
+    muts.push({s:good.slice(0,i)+good.slice(i+1),
+      why:`Parentheses come only from rule 3, always as a matching pair around a binary compound — one is missing/extra here.`});
+  }
+  // dupOp — double a binary connective
+  const bins=tSubAsts(ast).filter(f=>f.op!=='var'&&f.op!=='~');
+  if(bins.length){
+    const sym=binOf(pick(bins));
+    const at=good.indexOf(' '+sym+' ');
+    if(at>=0) muts.push({s:good.slice(0,at)+' '+sym+' '+sym+good.slice(at+sym.length+1),
+      why:`No rule ever places two connectives side by side — rule 3 always puts a wff on each side.`});
+  }
+  // dropOperand — delete the letter right after a binary connective
+  for(const f of shuffle(bins)){
+    const seg=' '+binOf(f)+' ';
+    const at=good.indexOf(seg);
+    if(at>=0 && /[A-Z]/.test(good[at+seg.length]||'')){
+      muts.push({s:good.slice(0,at+seg.length)+good.slice(at+seg.length+1),
+        why:`Rule 3 needs a wff on BOTH sides of the connective; the right-hand one is missing.`});
+      break;
+    }
+  }
+  // bareBinary — strip the parentheses off a binary compound with a binary part
+  if(ast.op!=='var'&&ast.op!=='~'){
+    const inner = (ast.a.op!=='var'&&ast.a.op!=='~') ? 'a' : (ast.b.op!=='var'&&ast.b.op!=='~') ? 'b' : null;
+    if(inner){
+      const k=ast[inner], strip=`${astRender(k.a)} ${binOf(k)} ${astRender(k.b)}`;
+      const s = inner==='a' ? `${strip} ${binOf(ast)} ${astRender(ast.b)}`
+                            : `${astRender(ast.a)} ${binOf(ast)} ${strip}`;
+      muts.push({s, why:`Without rule 3's parentheses this string could be grouped two ways — the grammar admits no ambiguous strings (unique readability).`});
+    }
+  }
+  // lowercase — lowercase one sentence letter
+  const capIdx=[...good].map((c,i)=>/[A-Z]/.test(c)?i:-1).filter(i=>i>=0);
+  if(capIdx.length){
+    const i=pick(capIdx);
+    muts.push({s:good.slice(0,i)+good[i].toLowerCase()+good.slice(i+1),
+      why:`The alphabet has only CAPITAL letters as sentence letters; no rule introduces lowercase.`});
+  }
+  const ok=muts.filter(m=>m.s!==good && !tStrictWff(m.s));
+  if(!ok.length){ const a2=tRandAst(2+rand(2)); return tWffOrNot(a2,astRender(a2)); }
+  const m=pick(ok);
+  return { setLine:'Set T — Formal Languages · Grammar & wffs',
+    prompt:box+`Is this string a wff of the language?<br>`+wff(m.s),
+    instr, mode:'mc', noKeyboard:true,
+    choices:[{text:YES,correct:false,why:m.why},
+             {text:NO,correct:true}],
+    explain:()=>`Not a wff. ${m.why}` };
+}
+function genT_gram(opts){
+  const kind=pick(['wffq','wffq','wffq','main','main','sub','clause','fixed']);
+  if(kind==='fixed') { const r=tBankItem(T_GRAM_FIXED,'Set T — Formal Languages · Grammar & wffs',''); r.prompt=tGrammarBox()+r.prompt; r.instr='A metatheorem is a claim ABOUT the formal language, proved in the metalanguage — usually by induction on the formation rules.'; return r; }
+  const ast=tRandAst(2+rand(2));
+  const good=astRender(ast);
+  if(kind==='wffq') return tWffOrNot(ast,good);
+  if(kind==='main'){
+    const root=ast.op==='var'?null:ast.op;
+    if(!root) return genT_gram(opts);
+    const names={'~':'the negation sign','&':`${SYM.and} (and)`,'|':`${SYM.or} (or)`,'>':`${SYM.horseshoe} (if-then)`,'=':`${SYM.threebar} (iff)`};
+    const symOf={'~':SYM.not,'&':SYM.and,'|':SYM.or,'>':SYM.horseshoe,'=':SYM.threebar};
+    const present=uniqStrings(tSubAsts(ast).filter(f=>f.op!=='var').map(f=>f.op));
+    const ds=present.filter(o=>o!==root).map(o=>({text:symOf[o],
+      why:`That occurrence lies inside the formula — within parentheses or inside a negated part. The main connective is the one applied LAST, governing the whole.`}));
+    while(ds.length<2){ const extra=pick(['&','|','>','=','~'].filter(o=>o!==root&&!ds.some(d=>d.text===symOf[o]))); ds.push({text:symOf[extra],why:`That connective doesn't govern the whole formula${present.includes(extra)?'':' — it does not even occur here'}.`}); }
+    return { setLine:'Set T — Formal Languages · Grammar & wffs',
+      prompt:tGrammarBox()+`What is the MAIN connective of ${wff(good)}?`,
+      instr:`The main connective is the one introduced by the LAST formation-rule application — the operator of the whole formula, outside every parenthesis pair (or the initial ${SYM.not} if the whole is a negation).`,
+      mode:'mc', noKeyboard:true, choices:mc(symOf[root],ds),
+      explain:()=>`The whole formula is ${names[root]==='the negation sign'?'a negation':'built with '+names[root]} — ${wff(symOf[root])} is applied last, so it's the main connective.` };
+  }
+  if(kind==='sub'){
+    const subs=uniqStrings(tSubAsts(ast).map(astRender));
+    if(subs.length<3) return genT_gram(opts);
+    let fake=astRender({op:'~',a:pick(tSubAsts(ast).filter(f=>f.op!=='~'))});
+    if(subs.includes(fake)) fake=astRender({op:'&',a:{op:'var',name:'A'},b:{op:'var',name:'Z'}});
+    const others=sampleDistinct(subs.filter(s=>s!==good),Math.min(3,subs.length-1))
+      .map(s=>({text:s,why:`That IS a subformula — it appears as a part built along the way to the whole.`}));
+    return { setLine:'Set T — Formal Languages · Grammar & wffs',
+      prompt:tGrammarBox()+`Which of these is NOT a subformula of ${wff(good)}?`,
+      instr:`The subformulas of a wff are the wffs used in building it up by the rules — its parts, their parts, and so on, plus the whole itself.`,
+      mode:'mc', noKeyboard:true, choices:mc(fake,others),
+      explain:()=>`${wff(fake)} never occurs in the construction of ${wff(good)}.` };
+  }
+  // clause: which clause certifies the last step
+  const forms=[{f:{op:'var',name:pick(['A','B','C'])},clause:'Clause 1 — it is a sentence letter',
+                d:[{text:'Clause 2 — negation',why:'No negation sign was applied; the string IS one of the alphabet\'s letters, which clause 1 admits outright.'},
+                   {text:'Clause 3 — binary connective',why:'No connective or parentheses here — clause 1 alone certifies bare letters.'}]},
+               {f:{op:'~',a:tRandAst(1+rand(2))},clause:`Clause 2 — it prefixes ${SYM.not} to a wff`,
+                d:[{text:'Clause 1 — sentence letter',why:'It is longer than a letter; the LAST step prefixed a negation sign, which is clause 2\'s business.'},
+                   {text:'Clause 3 — binary connective',why:'The outermost operation is the initial negation sign, not a parenthesized binary compound — even if clause 3 was used earlier, the FINAL step is clause 2.'}]},
+               {f:{op:pick(['&','|','>','=']),a:tRandAst(1),b:tRandAst(1)},clause:'Clause 3 — it joins two wffs with a binary connective inside parentheses',
+                d:[{text:'Clause 2 — negation',why:'The whole string is a parenthesized compound; negations, if any, occur inside. The final step is clause 3.'},
+                   {text:'Clause 1 — sentence letter',why:'Far more than a letter — the outer parentheses come from clause 3.'}]}];
+  const pk=pick(forms);
+  return { setLine:'Set T — Formal Languages · Grammar & wffs',
+    prompt:tGrammarBox()+`Given that its immediate parts are wffs, which clause certifies that ${wff(astRender(pk.f))} is a wff?`,
+    instr:`Read the formula from the outside in: what was the LAST rule applied?`,
+    mode:'mc', noKeyboard:true, choices:mc(pk.clause,pk.d),
+    explain:()=>pk.clause+'.' };
+}
+
+const T_SEM=[
+  {q:`An INTERPRETATION of the propositional language is:`,
+   a:`an assignment of a truth value to each sentence letter — the connectives' tables then fix every wff's value`,
+   d:[{text:`a translation of the formulas into English`,why:`Translation attaches English meanings; an interpretation in the logician's sense just supplies truth values — that's all the semantics of PL needs.`},
+      {text:`a proof of the formula`,why:`Proof is syntax. Interpretation is the semantic side — no rules, just truth values.`}],
+   x:`This is where semantics enters: symbols get truth values, and truth for compounds is computed. Before an interpretation, a wff is pure shape.`},
+  {q:`A TAUTOLOGY is a wff that is:`,
+   a:`true under every interpretation — every row of its truth table`,
+   d:[{text:`true under at least one interpretation`,why:`That's SATISFIABILITY — much weaker.`},
+      {text:`provable without premises`,why:`That's a syntactic notion (theoremhood). Extensionally they coincide in good systems — but by DEFINITION a tautology is a semantic creature. Keeping the notions apart is the whole game here.`}],
+   x:`Tautology, satisfiable, contradiction: semantic classifications, defined by truth under interpretations.`},
+  {q:`"Γ ${'⊨'} A" (A is a semantic consequence of the set Γ) means:`,
+   a:`every interpretation making all members of Γ true makes A true`,
+   d:[{text:`A can be derived from Γ by the rules`,why:`That's Γ ⊢ A — the syntactic counterpart. ⊨ mentions no rules at all, only truth.`},
+      {text:`A and Γ are all true`,why:`⊨ doesn't say anything IS true — it says truth of Γ would guarantee truth of A, across all interpretations.`}],
+   x:`⊨ = preservation of truth under all interpretations; ⊢ = derivability by rules. Soundness and completeness are about how the two line up.`},
+  {q:`A COUNTEREXAMPLE to the claim Γ ${'⊨'} A is:`,
+   a:`an interpretation making every member of Γ true and A false`,
+   d:[{text:`a proof of the negation of A`,why:`That's syntax again — a counterexample is a truth-value assignment, not a derivation.`},
+      {text:`an interpretation making A false`,why:`Not enough — it must ALSO make all of Γ true, or it refutes nothing.`}],
+   x:`One such interpretation kills the entailment; none existing IS the entailment.`},
+  {q:`The connectives of propositional logic are TRUTH-FUNCTIONAL, meaning:`,
+   a:`the truth value of a compound is completely fixed by the truth values of its parts`,
+   d:[{text:`they always produce true sentences`,why:`Truth-functionality is about DEPENDENCE on parts' values, not about being true.`},
+      {text:`their meaning is given by examples`,why:`Their meaning is given by truth TABLES — the function from input values to output value.`}],
+   x:`Contrast English "because": knowing the truth values of P and Q does not settle "P because Q." Not truth-functional — so PL doesn't try to capture it.`},
+  {q:`Truth tables give propositional logic a DECISION PROCEDURE for validity because:`,
+   a:`a formula with n letters has just 2ⁿ interpretations, and the table checks every one mechanically in finitely many steps`,
+   d:[{text:`they make formulas easier to read`,why:`Legibility isn't the point — GUARANTEED mechanical verdicts in finite time is what "decision procedure" means.`},
+      {text:`every formula is true in some row`,why:`False (contradictions aren't) — and irrelevant to decidability.`}],
+   x:`Semantic question, mechanical answer: that's decidability, and it's special — quantificational logic has no such procedure (see the Metatheory activity).`},
+  {q:`The pair {${'∼'}, ${'•'}} is EXPRESSIVELY COMPLETE (all truth-functions definable). The pair {${'•'}, ${'∨'}} is not, because:`,
+   a:`any formula built from • and ∨ alone is true whenever all its letters are true — so negation can never be expressed`,
+   d:[{text:`two connectives are never enough`,why:`{∼, •} is a pair and suffices; indeed the Sheffer stroke suffices ALONE.`},
+      {text:`∨ can already be defined from •`,why:`It can't (without ∼) — and the real obstacle is different: nothing in {•, ∨} can turn all-true inputs into false.`}],
+   x:`The all-true row is a trap: • and ∨ both output true on it, so anything built from them does too — but ∼A needs false there. An invariance argument, and a tiny metatheorem.`},
+  {q:`That a single connective — the Sheffer stroke, "not both" — suffices to express ALL truth-functions shows:`,
+   a:`our familiar five connectives are a convenience, not a necessity; the expressive power matters, not the inventory`,
+   d:[{text:`the five connectives are ambiguous`,why:`Nothing ambiguous about them — they're just definable from a smaller basis.`},
+      {text:`logic needs only one truth value`,why:`Two values throughout; ONE CONNECTIVE is what's economized.`}],
+   x:`∼P := (P|P); (P•Q) := ((P|Q)|(P|Q)); and the rest follow. Economy of primitives is a recurring metatheoretic theme.`},
+];
+function genT_sem(opts){
+  if(Math.random()<0.45){
+    const ast=tRandAst(2+rand(2),['A','B'].concat(Math.random()<0.5?['C']:[]));
+    const L=astLetters(ast);
+    if(!L.length) return genT_sem(opts);
+    let t=0,n=0;
+    for(const a of allAssignments(L)){ n++; if(astEval(ast,a)) t++; }
+    const cls= t===n?'tautology': t===0?'contradiction':'contingent';
+    const disp=wff(astRender(ast));
+    const D={
+      tautology:[{text:'Contingent — true under some interpretations, false under others',why:'Check again: EVERY row comes out true.'},
+                 {text:'A contradiction — false under every interpretation',why:'The opposite: every row is true.'}],
+      contradiction:[{text:'A tautology — true under every interpretation',why:'The opposite: every row is false.'},
+                 {text:'Contingent — true under some interpretations, false under others',why:'No interpretation makes it true — that is contradiction territory.'}],
+      contingent:[{text:'A tautology — true under every interpretation',why:`Not all rows: it is false under ${n-t} of the ${n} interpretations.`},
+                 {text:'A contradiction — false under every interpretation',why:`Not all rows: it is true under ${t} of the ${n} interpretations.`}]};
+    const A={tautology:'A tautology — true under every interpretation',
+             contradiction:'A contradiction — false under every interpretation',
+             contingent:'Contingent — true under some interpretations, false under others'};
+    return { setLine:'Set T — Formal Languages · Syntax vs semantics',
+      prompt:`Classify ${disp} semantically.`,
+      instr:`Run the truth table in your head (or the scratch space): ${L.join(', ')} give ${n} interpretations. True in all = tautology; in none = contradiction; otherwise contingent.`,
+      mode:'mc', noKeyboard:true, scratch:true, choices:mc(A[cls],D[cls]),
+      explain:()=>`${A[cls]} — true under ${t} of the ${n} interpretations.` };
+  }
+  return tBankItem(T_SEM,'Set T — Formal Languages · Syntax vs semantics',
+    `Syntax: shape and rules (wff, proof, ⊢). Semantics: truth under interpretations (tautology, ⊨). The discipline is keeping the two columns separate — then studying how they correspond.`);
+}
+
+const T_META=[
+  {q:`SOUNDNESS of a proof system says:`,
+   a:`whatever the system proves is valid — if ⊢ A then ${'⊨'} A`,
+   d:[{text:`whatever is valid, the system proves — if ⊨ A then ⊢ A`,why:`That's COMPLETENESS, the converse. Soundness: the system never overreaches. Completeness: it never falls short.`},
+      {text:`the system's axioms are self-evident`,why:`Self-evidence is epistemology; soundness is a precise mathematical relation between ⊢ and ⊨.`},
+      {text:`no proof in the system contains errors`,why:`Individual proofs being checked correctly is proof-checking; soundness is a theorem about the SYSTEM: rules preserve validity.`}],
+   x:`Sound = proves only valid things. The standard proof: axioms are valid, rules preserve validity, so by induction on proof length every theorem is valid — a metatheorem proved by induction.`},
+  {q:`COMPLETENESS of a proof system (in the semantic sense) says:`,
+   a:`every valid formula is provable — if ${'⊨'} A then ⊢ A`,
+   d:[{text:`every provable formula is valid`,why:`That's SOUNDNESS. Completeness is the harder converse: the rules are strong enough to reach EVERYTHING valid.`},
+      {text:`every formula is provable or refutable`,why:`That's "negation-completeness" of a THEORY — a different notion that happens to share the name. Semantic completeness relates ⊢ to ⊨.`},
+      {text:`the system contains all the connectives`,why:`Expressive completeness is yet a third notion. The three "completenesses" are the great false friends of metatheory.`}],
+   x:`Soundness + completeness together: ⊢ and ⊨ pick out exactly the same formulas — the rules capture the semantics precisely. For propositional and quantificational logic, both hold.`},
+  {q:`A system is CONSISTENT when:`,
+   a:`for no formula A are both A and its negation provable`,
+   d:[{text:`everything it proves is true`,why:`That's soundness (given an interpretation). Consistency is purely syntactic — no contradiction derivable — and is weaker.`},
+      {text:`it proves at least one formula`,why:`Backwards — an inconsistent system (classically) proves EVERYTHING; consistency is about not proving too much.`}],
+   x:`Consistency is the minimal virtue: an inconsistent classical system proves every formula whatsoever, so distinctions collapse.`},
+  {q:`Propositional logic is DECIDABLE. That means:`,
+   a:`a mechanical procedure (e.g. the truth table) settles, for any formula, in finitely many steps, whether it is valid`,
+   d:[{text:`every formula of it is either true or false`,why:`Bivalence is a semantic principle; decidability is about the existence of an ALGORITHM for validity.`},
+      {text:`its formulas are all provable`,why:`Only the valid ones are (soundness!). Decidability says the valid/invalid boundary is mechanically computable.`}],
+   x:`2ⁿ rows, finite check, guaranteed verdict. Slow, maybe — but always terminating with an answer.`},
+  {q:`Church's theorem (1936) says that quantificational (first-order) logic is:`,
+   a:`undecidable — no algorithm whatsoever settles validity for arbitrary formulas`,
+   d:[{text:`incomplete — some valid formulas are unprovable`,why:`No — Gödel (1930) proved first-order logic COMPLETE. Undecidable and incomplete are different properties; FOL is complete yet undecidable.`},
+      {text:`inconsistent`,why:`Nothing of the sort — FOL is consistent, sound, and complete. Only the DECISION problem is unsolvable.`},
+      {text:`undecidable so far — no one has yet found the algorithm`,why:`The theorem PROVES none can exist, ever. That's the force of it — an impossibility result, not a report of failure.`}],
+   x:`A landmark: for quantificational logic there is provably no analogue of the truth-table method.`},
+  {q:`Though undecidable, first-order validity is SEMI-decidable: a proof-search procedure will`,
+   a:`eventually confirm any valid formula — but on an invalid one it may run forever, never announcing invalidity`,
+   d:[{text:`eventually classify every formula correctly`,why:`That would be full decidability, which Church refutes. The asymmetry — yes-answers guaranteed, no-answers not — is exactly semi-decidability.`},
+      {text:`confirm invalid formulas but not valid ones`,why:`The other way round: completeness guarantees a proof EXISTS for each valid formula, and systematic search will find it.`}],
+   x:`Enumerate all proofs; if A is valid, its proof turns up. If A is invalid, silence — and you never know if it's silence-so-far or silence-forever.`},
+  {q:`"Gödel proved logic is incomplete" — what's wrong with this common slogan?`,
+   a:`Gödel proved first-order LOGIC complete (1930); the incompleteness theorems (1931) concern formal THEORIES of arithmetic, not the logic itself`,
+   d:[{text:`nothing — that is what Gödel proved`,why:`The slogan mixes 1930 and 1931. The logic captures all VALID formulas; what no adequate theory can capture is all arithmetic TRUTHS.`},
+      {text:`it was Church, not Gödel`,why:`Church proved UNDECIDABILITY of FOL — a third result again. Three theorems, three properties: complete (logic), incomplete (arithmetic theories), undecidable (FOL validity).`}],
+   x:`Same man, opposite-sounding theorems, one year apart — the standard test of whether someone keeps "logic" and "theory" distinct.`},
+  {q:`Gödel's FIRST incompleteness theorem, carefully stated: any formal theory that is (i) consistent, (ii) effectively axiomatized, and (iii) strong enough for basic arithmetic`,
+   a:`contains a sentence of its own language that it can neither prove nor refute`,
+   d:[{text:`is inconsistent`,why:`The theorem ASSUMES consistency — it concludes incompleteness, not contradiction.`},
+      {text:`proves some false sentences`,why:`Nothing about proving falsehoods; the theorem finds truths (in the standard model) that the theory cannot PROVE.`},
+      {text:`shows human minds surpass machines`,why:`A contested PHILOSOPHICAL gloss (Lucas, Penrose), not the theorem. The mathematics concerns formal derivability only.`}],
+   x:`All three hypotheses matter: drop effectiveness and true arithmetic is a counterexample; drop arithmetic strength and complete theories exist (e.g. of dense linear orders).`},
+  {q:`In the first incompleteness theorem, "the Gödel sentence is true but unprovable" means:`,
+   a:`true in the standard model of arithmetic, yet not derivable in the particular theory in question`,
+   d:[{text:`true in a mystical sense beyond mathematics`,why:`Nothing mystical: "true" = true of the actual natural numbers, a perfectly definite (meta-level) notion.`},
+      {text:`unprovable by any means whatsoever`,why:`Only unprovable IN THAT THEORY — a stronger theory proves it (and has its own new Gödel sentence). The result is relative to each theory.`}],
+   x:`Each adequate theory has its own blind spot; strengthening the theory moves the blind spot, never removes it.`},
+  {q:`Gödel's SECOND incompleteness theorem: such a theory, if consistent,`,
+   a:`cannot prove its own consistency`,
+   d:[{text:`cannot prove anything about itself`,why:`It proves plenty about itself — arithmetized syntax is the engine of the whole proof. Its own CONSISTENCY is the specific unprovable item.`},
+      {text:`is probably inconsistent`,why:`No such conclusion — the theorem just locates one more sentence (the consistency statement) outside the theory's reach.`}],
+   x:`This is what wrecked Hilbert's original program: a theory can't certify its own reliability by its own lights.`},
+  {q:`The COMPACTNESS theorem for first-order logic:`,
+   a:`if every finite subset of a set of sentences is satisfiable, the whole set is satisfiable`,
+   d:[{text:`every satisfiable set is finite`,why:`False and not the theorem — infinitely many sentences can be satisfied together; compactness says finite checkability suffices.`},
+      {text:`every proof uses finitely many premises`,why:`True, and it's WHY compactness holds (via completeness) — but the theorem itself is the semantic statement about satisfiability.`}],
+   x:`Strange consequences flow: a theory with arbitrarily large finite models has an infinite one; nonstandard models of arithmetic exist. Finite proofs cast long semantic shadows.`},
+  {q:`"Effectively axiomatized" in the Gödel theorems means:`,
+   a:`an algorithm can decide, of any given string, whether it is one of the theory's axioms (and whether a given array is a proof)`,
+   d:[{text:`the axioms are few`,why:`Infinitely many axioms are fine (axiom SCHEMES are standard) — what matters is mechanical recognizability.`},
+      {text:`the axioms are obviously true`,why:`Epistemic obviousness is irrelevant; the condition is computational: axiomhood must be checkable.`}],
+   x:`This is the hypothesis that makes "the set of theorems is effectively enumerable" true — and it's why "true arithmetic" (all truths of the standard model) escapes the theorem: it isn't effectively axiomatizable.`},
+  {q:`The Church–Turing thesis — "the effectively computable functions are exactly the Turing-computable ones" — has the status of:`,
+   a:`a bridge between an informal notion and a formal one — supported by converging evidence, not the kind of claim that admits ordinary mathematical proof`,
+   d:[{text:`a theorem proved by Turing`,why:`Turing proved theorems ABOUT his machines; the thesis links them to the INFORMAL idea of effective procedure, and informal notions don't figure in theorems.`},
+      {text:`a mere convention of terminology`,why:`More than convention: every proposed rival analysis (recursion, λ-calculus, register machines…) provably coincides with Turing computability — striking evidence, though still not proof.`}],
+   x:`It matters here because undecidability results ("NO algorithm exists") inherit their sweep from the thesis.`},
+  {q:`Gensler's propositional logic — the system practiced throughout this app — is:`,
+   a:`sound, complete, consistent, and decidable: everything provable is valid, everything valid is provable, no contradictions, and truth tables decide validity`,
+   d:[{text:`sound and complete but undecidable`,why:`Undecidability starts with QUANTIFICATIONAL logic; the propositional fragment has its truth-table decision procedure.`},
+      {text:`incomplete, by Gödel's theorem`,why:`Gödel's incompleteness needs arithmetic-strength THEORIES; propositional logic is far below the threshold, and is complete.`}],
+   x:`All the good properties at once — propositional logic is metatheoretic paradise. Each step up (quantifiers, then arithmetic) surrenders one: first decidability, then (for theories) completeness.`},
+  {q:`The Löwenheim–Skolem theorem: a countable set of first-order sentences with an infinite model`,
+   a:`also has a countable model`,
+   d:[{text:`has models only of one fixed size`,why:`The reverse — first-order theories are strikingly BAD at pinning down infinite sizes.`},
+      {text:`must be inconsistent`,why:`Having models is the OPPOSITE of inconsistency.`}],
+   x:`Hence "Skolem's paradox": set theory proves uncountable sets exist, yet has a countable model. Resolution: "uncountable" inside the model means no bijection IN THE MODEL — the model lacks the pairing, not the sets. A vivid lesson in object/meta relativity.`},
+  {q:`Soundness and completeness are METAtheorems. That means they are:`,
+   a:`proved in the metalanguage, ABOUT the system — they are not derivations inside the system itself`,
+   d:[{text:`especially important theorems of the system`,why:`They aren't theorems OF the system at all — the system proves wffs; these are English-and-mathematics results about the relation ⊢/⊨.`},
+      {text:`unprovable assumptions`,why:`Fully proved — just one level up, with induction on proofs (soundness) or model constructions (completeness).`}],
+   x:`The whole subject of this exercise set lives one level up: the formal language and system are the object; the reasoning about them is meta.`},
+  {q:`Decidability and (semantic) completeness are independent properties. First-order logic itself is the standard example of a system that is:`,
+   a:`complete but undecidable — every valid formula is provable, yet no algorithm separates the valid from the invalid`,
+   d:[{text:`decidable but incomplete`,why:`Backwards on both counts for FOL.`},
+      {text:`complete, hence decidable`,why:`The inference fails: completeness yields only SEMI-decidability (search finds proofs of valid formulas) — nothing ever certifies invalidity in general.`}],
+   x:`Completeness guarantees proofs exist; decidability demands an always-terminating method. Existence without a guaranteed finding-procedure-with-verdict: the gap between the two.`},
+];
+function genT_meta(opts){
+  const r=tBankItem(T_META,'Set T — Formal Languages · Metatheory',
+    `Keep four properties separate: SOUND (proves only valid formulas), COMPLETE (proves all of them), CONSISTENT (never both A and not-A), DECIDABLE (an algorithm settles validity). Propositional logic: all four. First-order logic: all but decidable. Arithmetic theories: completeness falls too (Gödel).`);
+  r.scratch=false; return r;
+}
+
+const T_REG=[
+  {q:`Montague's famous thesis, opening "English as a Formal Language" (1970):`,
+   a:`there is no important theoretical difference between formal and natural languages — both can be given exact syntax and semantics`,
+   d:[{text:`natural language is too vague and ambiguous for exact treatment`,why:`Precisely the orthodoxy (Frege, Russell, Tarski leaned that way) that Montague was rejecting.`},
+      {text:`artificial languages are unnecessary because English already is one`,why:`Montague built elaborate formal machinery; the claim is that English CAN BE TREATED with the same exactness, not that the machinery is idle.`},
+      {text:`English speakers unconsciously use predicate logic`,why:`A psychological thesis Montague never advanced — his was a mathematical claim about describability.`}],
+   x:`Montague backed it up: fragments of English with mathematically exact syntax and compositional semantics. This exercise set's regimented fragment is a low-tech descendant.`},
+  {q:`COMPOSITIONALITY — the principle at the heart of Montague's program — says:`,
+   a:`the meaning of a complex expression is determined by the meanings of its parts and the way they are combined`,
+   d:[{text:`every sentence can be decomposed into words`,why:`Trivially true and not the principle — the principle is that meaning is computed FROM the parts by the mode of combination.`},
+      {text:`meanings are conventional`,why:`A different thesis. Compositionality is about how complex meanings depend on simpler ones — what makes infinite understanding from finite means possible.`}],
+   x:`The same principle you use computing a wff's truth value from its parts' values — semantics tracking syntax, clause by clause.`},
+  {q:`Klima's point about the medieval logicians (Buridan, Ockham, and company):`,
+   a:`they had no artificial symbolism — instead they regimented Latin itself, fixing word order and scope conventions until a disciplined fragment of the natural language did a formal language's work`,
+   d:[{text:`they anticipated modern symbolic notation`,why:`Almost none — a handful of abbreviations aside, their technical instrument WAS regimented Latin, which is exactly Klima's point.`},
+      {text:`they distrusted formal methods`,why:`The opposite: supposition theory and their scope-idioms were rigorous formal method, executed in a natural language.`}],
+   x:`Klima's reconstructions render regimented Latin with restricted variables — the approach behind this app's Medieval Term Logic workbench (unlock it via Set I). Regimentation is an old, powerful road to rigor.`},
+  {q:`What does REGIMENTING a fragment of English mainly buy, compared with English at large?`,
+   a:`each regimented sentence has exactly one reading — scope is fixed by the order of the fronted quantifier phrases`,
+   d:[{text:`shorter sentences`,why:`Usually LONGER ("every critic is such that…"). The gain is uniqueness of reading, not brevity.`},
+      {text:`new expressive power English lacked`,why:`It expresses the readings English already had — but one at a time, unmistakably.`}],
+   x:`Regimented English is to English what a wff is to a formula-sketch: same content, ambiguity engineered out.`},
+  {q:`And what does a fully ARTIFICIAL language (like our wff-language) add beyond regimented English?`,
+   a:`a mechanically checkable syntax — whether a string is well-formed is decidable by algorithm, with no judgment calls`,
+   d:[{text:`the ability to express generality`,why:`Regimented English expresses generality fine ("every man is such that…"). The artificial language's edge is machine-checkable syntax and total explicitness.`},
+      {text:`truth`,why:`Neither language is "truer" — interpretations confer truth in both cases.`}],
+   x:`A trade: the symbolism maximizes rigor and checkability; regimented English keeps readability and stays close to the reasoning we actually give. Montague and Klima show the gap is smaller than it looks.`},
+  {q:`Gensler's Loglish — "For all x: if x is F, then x is G" — compared with this activity's regimented English — "every F is such that it is G":`,
+   a:`Loglish imports the symbolism's variables into English; regimented English instead uses restricted phrases ("every F") with pronouns doing the variables' work`,
+   d:[{text:`they are the same fragment`,why:`Close cousins, not twins: Loglish says "x" out loud; the regimented fragment stays variable-free, binding pronouns to fronted phrases — the medieval (and Montagovian) route.`},
+      {text:`Loglish is regimented Latin`,why:`Loglish is Gensler's English-symbol hybrid; regimented Latin is the medievals' instrument that Klima reconstructs.`}],
+   x:`Two halfway houses between English and symbols, meeting from opposite sides.`},
+  {q:`In the donkey sentence "Every farmer who owns a donkey beats it," the pronoun "it" functions as:`,
+   a:`a bound variable — it varies with the donkeys, rather than naming any one donkey`,
+   d:[{text:`a name for a particular donkey`,why:`No particular donkey is in view — different farmers, different donkeys. "It" covaries: the mark of a variable, not a name.`},
+      {text:`a mere filler word with no logical role`,why:`Drop it and the sentence collapses — "it" carries the binding structure that makes the sentence say what it says.`}],
+   x:`Pronouns-as-variables is a central discovery of both medieval supposition theory and modern semantics — natural language has binding machinery of its own.`},
+  {q:`Regimenting the donkey sentence as "some donkey is such that every farmer who owns it beats it" FAILS because:`,
+   a:`the sentence doesn't say one donkey is owned-and-beaten by all — it says each farmer beats whatever donkeys he owns; the indefinite "a donkey" here has universal, not existential, force`,
+   d:[{text:`"a donkey" always means "some donkey," so the regimentation is right`,why:`The classic trap: inside "every farmer who ___," the indefinite's force flips. The accepted regimentation is "every farmer is such that every donkey he owns is such that he beats it."`},
+      {text:`donkeys cannot be quantified over`,why:`They quantify fine — the subtlety is which quantifier the indefinite article contributes here.`}],
+   x:`Donkey anaphora is the standard demonstration that surface form misleads — and that regimentation forces the hidden structure into the open. It vexed the medievals and still powers modern semantics.`},
+  {q:`"Every senator admires himself" vs "Every senator is such that he admires him." The reflexive "himself":`,
+   a:`must be bound by the local subject — the regimentation with two pronouns wrongly allows "him" to point at someone else`,
+   d:[{text:`means the same as "him" in all contexts`,why:`English reflexives are obligatorily locally bound; plain "him" in that position resists exactly that reading. Binding is grammar, not just interpretation.`},
+      {text:`is emphatic and logically idle`,why:`It fixes WHO is admired — hardly idle. Regimentation must preserve the binding: "…is such that he admires himself."`}],
+   x:`Natural language wears some of its binding theory on its sleeve — regimentation has to respect it, not flatten it.`},
+  {q:`"All that glitters is not gold" — as actually intended — regiments as:`,
+   a:`it is not the case that every glittering thing is such that it is gold`,
+   d:[{text:`every glittering thing is such that it is not gold`,why:`That says NOTHING glittering is gold — refuted by one gold ingot. The proverb denies the universal; it doesn't assert a universal denial.`},
+      {text:`some glittering thing is such that it is gold`,why:`Compatible with the intended reading, but far weaker than what the proverb conveys: the FAILURE of "all that glitters is gold."`}],
+   x:`Surface order puts "not" after the verb; the intended scope puts it over the whole universal. Regimentation makes the scope visible — the whole point of the fragment.`},
+  {q:`"If anyone objects, the meeting stops" vs "if everyone objects, the meeting stops": "any" differs from "every" here in that:`,
+   a:`"any" takes wide scope over the conditional — one objector suffices — while "every" stays inside the if-clause`,
+   d:[{text:`they are interchangeable`,why:`Then a lone objector would either stop the meeting on both readings or on neither — but plainly the "any" version triggers on one objector and the "every" version needs unanimity.`},
+      {text:`"any" is just more formal`,why:`Register isn't it — the two words have systematically different scope behavior, one of Gensler's own recurring translation warnings.`}],
+   x:`Regimented: "every person is such that if he objects, the meeting stops" (any) vs "if every person is such that he objects, the meeting stops" (every). The fragment forces the choice English elides.`},
+  {q:`Three kinds of ambiguity: LEXICAL ("bank"), STRUCTURAL/amphiboly ("old men and women"), SCOPE ("everyone loves someone"). A formal language eliminates:`,
+   a:`all three by design — one meaning per symbol, unique readability for structure, explicit operator order for scope`,
+   d:[{text:`only lexical ambiguity`,why:`Parentheses (unique readability) kill amphiboly, and operator order kills scope ambiguity — the design handles all three.`},
+      {text:`none — ambiguity is unavoidable in any language`,why:`Avoiding it is precisely what formal languages are FOR; the cost is distance from natural idiom, which regimented English then tries to win back.`}],
+   x:`Regimented English matches the formal language on structure and scope, and controls lexical ambiguity by fixing a small technical vocabulary.`},
+  // FLAG: this item's answer/distractor text hardcodes Gensler symbols and (x)/(∃x)
+  // rather than going through SYM/qU/qE, so it will not follow the notation setting.
+  // Kept verbatim per the spec; the templated tRegScope() items below do respect it.
+  {q:`In the regimented fragment, quantifier phrases are RESTRICTED ("every critic," "some book"), while the classical symbolism uses UNRESTRICTED variables plus connectives. The correspondence:`,
+   a:`"every A is such that it is B" matches ${'(x)(Ax ⊃ Bx)'}, and "some A is such that it is B" matches ${'(∃x)(Ax • Bx)'} — universal pairs with if-then, existential with and`,
+   d:[{text:`both quantifiers pair with if-then`,why:`"Some A is such that it is B" as (∃x)(Ax ⊃ Bx) would be true whenever anything at all fails to be A — one of the most instructive translation errors there is.`},
+      {text:`both quantifiers pair with and`,why:`(x)(Ax • Bx) says everything is BOTH A and B — far stronger than "every A is B."`}],
+   x:`Restricted quantification is arguably the more natural primitive — medieval logic (and Klima's reconstruction, and this app's MTL workbench) builds the restriction into the variable itself.`},
+];
+const T_SCOPE=[
+  {every:'critic', some:'book',    verb:'reviewed', E:'Every critic reviewed some book.',  L:['C','B','R'], pro:['he','it']},
+  {every:'student',some:'question',verb:'answered', E:'Every student answered some question.', L:['S','Q','A'], pro:['he','it']},
+  {every:'detective',some:'suspect',verb:'questioned', E:'Every detective questioned some suspect.', L:['D','S','Q'], pro:['he','him']},
+  {every:'reporter',some:'scandal',verb:'covered',  E:'Every reporter covered some scandal.', L:['R','S','C'], pro:['she','it']},
+  {every:'child',  some:'toy',     verb:'wanted',   E:'Every child wanted some toy.', L:['C','T','W'], pro:['he','it']},
+  {every:'teacher',some:'pupil',   verb:'praised',  E:'Every teacher praised some pupil.', L:['T','P','R'], pro:['she','him']},
+  {every:'lawyer', some:'case',    verb:'cited',    E:'Every lawyer cited some case.', L:['L','C','K'], pro:['he','it']},
+  {every:'nurse',  some:'patient', verb:'visited',  E:'Every nurse visited some patient.', L:['N','P','V'], pro:['she','him']},
+  {every:'poet',   some:'painting',verb:'admired',  E:'Every poet admired some painting.', L:['P','G','A'], pro:['he','it']},
+];
+function tRegScope(){
+  const t=deckPick(T_SCOPE);
+  const [P,Q,V]=t.L;
+  const narrow=`Every ${t.every} is such that some ${t.some} is such that ${t.pro[0]} ${t.verb} ${t.pro[1]}.`;
+  const wide  =`Some ${t.some} is such that every ${t.every} is such that ${t.pro[0]} ${t.verb} ${t.pro[1]}.`;
+  const fNarrow=`${qU('x')}(${P}x ${SYM.horseshoe} ${qE('y')}(${Q}y ${SYM.and} ${V}xy))`;
+  const fWide  =`${qE('y')}(${Q}y ${SYM.and} ${qU('x')}(${P}x ${SYM.horseshoe} ${V}xy))`;
+  const kind=pick(['reading','reading','toFormula','fromFormula']);
+  const instr=`In the regimented fragment, scope = left-to-right order of the fronted phrases: whichever "is such that" comes first has the whole rest in its scope. Each pronoun picks up the nearest fronted phrase of its kind.`;
+  if(kind==='reading'){
+    const narrowAsked=Math.random()<0.5;
+    const gloss=narrowAsked?`on the reading where the ${t.some} may DIFFER from ${t.every} to ${t.every}`
+                           :`on the reading where ONE ${t.some} is ${t.verb} by all of them`;
+    const ans=narrowAsked?narrow:wide, other=narrowAsked?wide:narrow;
+    return { setLine:'Set T — Formal Languages · Regimented English',
+      prompt:`"${t.E}"<br>Regiment this ${gloss}:`,
+      instr, mode:'mc', noKeyboard:true,
+      choices:mc(ans,[
+        {text:other, why:narrowAsked?`Fronting "some ${t.some}" first gives it widest scope — ONE ${t.some} for all — the other reading.`:`Fronting "every ${t.every}" first lets the ${t.some} vary from ${t.every} to ${t.every} — the other reading.`},
+        {text:`Every ${t.every} is such that every ${t.some} is such that ${t.pro[0]} ${t.verb} ${t.pro[1]}.`, why:`Two "every"s — but the original says SOME ${t.some}.`},
+        {text:`Some ${t.every} is such that some ${t.some} is such that ${t.pro[0]} ${t.verb} ${t.pro[1]}.`, why:`The original quantifies over ALL ${t.every}s, not just some.`}]),
+      explain:()=>`${ans.replace(/\.$/,'')} — the first-fronted phrase takes widest scope.` };
+  }
+  if(kind==='toFormula'){
+    const narrowAsked=Math.random()<0.5;
+    const sent=narrowAsked?narrow:wide, ans=narrowAsked?fNarrow:fWide, other=narrowAsked?fWide:fNarrow;
+    return { setLine:'Set T — Formal Languages · Regimented English',
+      prompt:`${P} = ${t.every} · ${Q} = ${t.some} · ${V}xy = x ${t.verb} y.<br>"${sent}"<br>symbolizes as:`,
+      instr:instr+` Universal restriction pairs with ${SYM.horseshoe}; existential with ${SYM.and}.`,
+      mode:'mc', noKeyboard:true,
+      choices:mc(ans,[
+        {text:other, why:`Quantifier order is flipped — the regimented sentence fronts ${narrowAsked?`"every ${t.every}"`:`"some ${t.some}"`} first, so that quantifier goes outermost.`},
+        {text:narrowAsked?`${qU('x')}(${P}x ${SYM.and} ${qE('y')}(${Q}y ${SYM.and} ${V}xy))`:`${qE('y')}(${Q}y ${SYM.horseshoe} ${qU('x')}(${P}x ${SYM.horseshoe} ${V}xy))`,
+         why:narrowAsked?`"Every" pairs with ${SYM.horseshoe}, not ${SYM.and} — with ${SYM.and} it claims everything IS a ${t.every}.`:`"Some" pairs with ${SYM.and}, not ${SYM.horseshoe} — with ${SYM.horseshoe} it is true as soon as anything fails to be a ${t.some}.`}]),
+      explain:()=>`${wff(ans)} — outermost quantifier = first-fronted phrase; every↦${SYM.horseshoe}, some↦${SYM.and}.` };
+  }
+  // fromFormula
+  const narrowAsked=Math.random()<0.5;
+  const ans=narrowAsked?narrow:wide, other=narrowAsked?wide:narrow, f=narrowAsked?fNarrow:fWide;
+  return { setLine:'Set T — Formal Languages · Regimented English',
+    prompt:`${P} = ${t.every} · ${Q} = ${t.some} · ${V}xy = x ${t.verb} y.<br>${wff(f)}<br>reads in regimented English as:`,
+    instr, mode:'mc', noKeyboard:true,
+    choices:mc(ans,[{text:other,why:`Scope order is flipped — the formula's outermost quantifier is ${narrowAsked?`the universal, so "every ${t.every}" must be fronted first`:`the existential, so "some ${t.some}" must be fronted first`}.`},
+      {text:t.E, why:`That's the AMBIGUOUS original — the exercise is to give the regimentation that pins down this formula's one reading.`}]),
+    explain:()=>`${ans.replace(/\.$/,'')} — regimented order mirrors the formula's quantifier order exactly.` };
+}
+function genT_reg(opts){
+  if(Math.random()<0.45) return tRegScope();
+  return tBankItem(T_REG,'Set T — Formal Languages · Regimented English',
+    `The fragment: front the quantifier phrases in scope order, each as "every/some … is such that …"; pronouns act as bound variables; "it is not the case that" marks negation scope. One sentence, one reading — that's the contract.`);
+}
+
 /* ---------- registry ---------- */
 const SETS = {
   A:{name:'Syllogistic Translations', chapter:'Ch. 2 · easier & harder', gen:genA, hasHarder:true},
@@ -5512,6 +6596,8 @@ const SETS = {
   P:{name:'Probability',              chapter:'Ch. 5 · dice, cards, coins', gen:genP, hasHarder:false},
   Q:{name:'Definitions',              chapter:'Ch. 3', gen:genQ, hasHarder:false},
   R:{name:'Fallacies',                chapter:'Ch. 4 · name the fallacy', gen:genR, hasHarder:false},
+  S:{name:'Sets', chapter:'Supplement · elementary set theory, to Cantor', gen:genS, hasHarder:false},
+  T:{name:'Formal Languages & Metatheory', chapter:'Supplement · syntax, semantics, the big theorems', gen:genT, hasHarder:false},
 };
 
 /* ============================================================================
@@ -5524,6 +6610,7 @@ let state = load() || { name:'', place:'', level:9, keyboard:true, sound:true, h
   bImport:'modern', modalSystem:'S5', notation:'gensler', univ:'paren', completed:{} };
 const STATE_DEFAULTS={ bMode:'sym', cMode:'easy', dMode:'eval', eMode:'sym', fMode:'s', gMode:'both', gLevel:'easier',
   hMode:'easy', iMode:'easier', jMode:'basic', kMode:'both', kLevel:'easier', lMode:'imp', mMode:'imp', nMode:'belief', pMode:'cards', rMode:'spot',
+  sMode:'basics', tMode:'lang',
   bImport:'modern', modalSystem:'S5', notation:'gensler', univ:'paren', treeClose:'manual', treeDN:false,
   gStars:'auto', gTrain:false, iKind:'both', hHints:true };
 for(const k in STATE_DEFAULTS) if(state[k]===undefined) state[k]=STATE_DEFAULTS[k];
@@ -5642,6 +6729,8 @@ function tlogAct(){
     case 'O': return 'proof';
     case 'P': return state.pMode||'cards';
     case 'R': return state.rMode||'spot';
+    case 'S': return state.sMode||'basics';
+    case 'T': return state.tMode||'lang';
     default: return undefined;
   }
 }
@@ -5768,6 +6857,7 @@ const SET_GROUPS=[
   ['Belief Logic', 'Chapter 13', ['N','O']],
   ['Probability & Induction', 'Chapter 5', ['P']],
   ['Definitions & Fallacies', 'Chapters 3–4', ['Q','R']],
+  ['Sets and Metatheory', 'Supplement', ['S','T']],
 ];
 /* ============================================================================
    MTL FOUNDATION — Medieval Term Logic (zero-entity semantics; a subject–predicate logic of terms).
@@ -7252,9 +8342,11 @@ function fileMenu(){
     : `<button class="setbtn tool" style="border-color:#2dd4bf;opacity:.45;cursor:not-allowed" title="Master Set I at level 9 to unlock" onclick="event.preventDefault()">
       <span class="id" style="color:#2dd4bf">🔒 Tool</span><span class="nm">Predicate Proof Builder</span>
       <span class="ch">Unlocks when you master Set I at level 9</span></button>`;
-  const groups=SET_GROUPS.map(([title,ch,ids])=>
+  const gHtml=([title,ch,ids])=>
     `<h3 style="margin:18px 0 2px">${title} <span class="muted" style="font-weight:400;font-size:13px">· ${ch}</span></h3>
-     <div class="grid">${ids.map(btn).join('')}${ids.includes('G')?toolBtn:''}${ids.includes('I')?qtoolBtn:''}${ids.includes('K')?ktoolBtn:''}</div>`).join('');
+     <div class="grid">${ids.filter(id=>SETS[id]).map(btn).join('')}${ids.includes('G')?toolBtn:''}${ids.includes('I')?qtoolBtn:''}${ids.includes('K')?ktoolBtn:''}</div>`;
+  const groups   = SET_GROUPS.filter(g=>g[0]!=='Sets and Metatheory').map(gHtml).join('');
+  const smGroups = SET_GROUPS.filter(g=>g[0]==='Sets and Metatheory').map(gHtml).join('');
   const dUnlocked=(state.completed.I||0)>=9;
   const deviantBtn = `<h3 style="margin:22px 0 2px">Explore · Non-Classical Logic</h3><div class="grid">`+ (dUnlocked
     ? `<button class="setbtn tool" style="border-color:#a78bfa;background:linear-gradient(160deg,rgba(167,139,250,0.16),rgba(167,139,250,0.05))" onclick="closeModal();launchDeviant()"><span class="id" style="color:#a78bfa">◆ Tool</span><span class="nm">Non-Classical Workbench</span><span class="ch">Free · intuitionistic · medieval term logic — validity checker &amp; proof builder · ungraded</span></button>`
@@ -7264,6 +8356,7 @@ function fileMenu(){
     <h2>Load Exercise Set</h2>
     ${groups}
     ${deviantBtn}
+    ${smGroups}
     <div class="rowbtns" style="margin-top:20px"><button class="ghost" onclick="openModal(optForm(false))">Options — name, scoring, sound &amp; technical settings</button></div>`);
 }
 /* ---- unified per-set exercise menu ----
@@ -7346,6 +8439,21 @@ const MENU={
   R:{key:'rMode',
      acts:[['spot','Spot the fallacy','Name the fallacy in a passage'],
            ['match','Definitions','Match fallacy to description']]},
+  S:{key:'sMode', type:true,
+     study:{label:'Short introduction to sets and set theory', body:sStudyCard},
+     acts:[['basics','Membership & notation','∈ vs ⊆, ∅ vs {∅}, roster & set-builder, extensionality'],
+           ['ops','Operations','Compute unions, intersections, differences, complements'],
+           ['power','Subsets & power sets','⊆, ⊂, P(A), and how big P(A) is'],
+           ['pairs','Pairs & products','Ordered pairs, A × B, counting with |A ∪ B|'],
+           ['laws','Laws of sets','True or false: De Morgan, distribution, subset equivalences'],
+           ['inf','Infinity','Bijections, countability, Cantor’s diagonal, Russell’s paradox']]},
+  T:{key:'tMode',
+     study:{label:'Short introduction to formal languages and metatheory', body:tStudyCard},
+     acts:[['lang','Language &amp; metalanguage','Use vs mention, object vs metalanguage, types &amp; tokens'],
+           ['gram','Grammar &amp; wffs','Formation rules, wff or not, main connective, subformulas'],
+           ['sem','Syntax vs semantics','Interpretations, tautologies, ⊨ vs ⊢'],
+           ['meta','Metatheory','Soundness, completeness, decidability, Gödel'],
+           ['reg','Regimented English','Scope made visible in English itself — Montague &amp; Klima']]},
 };
 function gMenuBody(){
   const lvl=state.gLevel||'easier', m=state.gMode||'both';
@@ -7462,7 +8570,12 @@ function openSetMenu(id){
   const M=MENU[id]||{};
   const s=SETS[id];
   let body='';
-  if(M.intro) body+=defIntroHtml();
+  if(M.intro) body+=(M.intro===true?defIntroHtml():M.intro());
+  if(M.study){
+    body+=`<div style="margin:0 0 14px"><button type="button" class="setbtn" data-study="1" style="width:100%;text-align:left">
+      <span class="id" style="font-size:14px">${M.study.label}</span>
+      <span class="ch">Optional overview — open the study card</span></button></div>`;
+  }
   if(M.layout==='G'){
     body+=gMenuBody();
   } else if(M.layout==='I'){
@@ -7513,6 +8626,10 @@ function openSetMenu(id){
     <p class="muted">All choices here earn toward the same 100-point completion of Set ${id}.</p>
     ${body}
     <div class="rowbtns"><button class="primary" onclick="startSet('${id}')">Start</button></div>`);
+  if(M.study){
+    const sb=modal.querySelector('[data-study]');
+    if(sb) sb.onclick=()=>openStudyPanel(id, M.study);
+  }
   if(M.acts) modal.querySelectorAll('[data-menuact]').forEach(b=>b.onclick=()=>{
     state[M.key]=b.dataset.menuact; save();
     modal.querySelectorAll('[data-menuact]').forEach(x=>x.classList.toggle('sel',x.dataset.menuact===state[M.key]));
@@ -7819,7 +8936,7 @@ const SET_TITLES={
   D:'Truth Tables', E:'Propositional Arguments', F:'Inference Rules', G:'Propositional Proofs',
   H:'Quantificational Translations', I:'Quantificational Proofs', J:'Modal Translations', K:'Modal Proofs',
   L:'Deontic Translations', M:'Deontic Proofs', N:'Belief Translations', O:'Belief Proofs',
-  P:'Probability', Q:'Definitions', R:'Fallacies'
+  P:'Probability', Q:'Definitions', R:'Fallacies', S:'Sets', T:'Formal Languages & Metatheory'
 };
 const ABOUT={
   A:'Put everyday statements using "all," "no," "some," "is," and "not" — about categories and individuals — into syllogistic logic.',
@@ -7839,7 +8956,9 @@ const ABOUT={
   O:'Derive the consistency norms that govern rational belief.',
   P:'Compute probabilities, odds, and expected value, and reason about induction.',
   Q:'Decide what is wrong with a proposed definition (too broad, circular, and so on).',
-  R:'Identify the informal fallacy a passage commits.'
+  R:'Identify the informal fallacy a passage commits.',
+  S:'Learn the basics of sets — membership, subsets, operations, power sets, ordered pairs, and the sizes of infinite sets. Not in Gensler, but standard background for every branch of logic.',
+  T:'Step back and study logical languages themselves: how a formal language is built from an alphabet and formation rules, how syntax differs from semantics and object language from metalanguage, what the great metatheorems say — and how a regimented fragment of English (Montague, Klima) can do a formal language\'s work.',
 };
 /* ---- About: LogiCola history (main page) / this exercise (during a set) ---- */
 function aboutView(){
@@ -7889,7 +9008,9 @@ const INFO={
   O:`Belief logic generates consistency norms (an implicit "be consistent" premise is built into the rules). Belief worlds ("u", "uu", …) contain everything you're committed to accepting. <b>B−</b>: from "${SYM.not}u:A" derive "u ${SYM.therefore} ${SYM.not}A" using a NEW string of u's (star the original). <b>B+</b>: from "u:A" derive "u ${SYM.therefore} A" using any string of u's (don't star). Use B− first, B+ later. Note what fails: not-believing isn't believing-not, and believing doesn't make true.`,
   P:`Probability = favorable ÷ total equally likely cases (52 cards, 36 dice combinations, 2ⁿ coin patterns). Necessary truth = 100%; self-contradiction = 0%; P(not A)=1−P(A). Independent: P(A and B)=P(A)·P(B); dependent: multiply by P(B after A). Mutually exclusive: P(A or B)=P(A)+P(B); overlapping: subtract the overlap. Conditional: P(B|A)=P(A and B)/P(A).<br><br><b>Odds</b>: against = unfavorable/favorable ("12 to 1 against"); in favor = favorable/unfavorable; x-to-y in favor → P = x/(x+y). <b>Expected gain</b> = P(win)·payoff − P(lose)·stake; compare options by expected cost. <b>Induction</b>: statistical syllogism (N% of A's are B's; X is an A; that's all we know ∴ N% probable), sample projection, analogy — plus Mill's methods (agreement, difference, disagreement, variation) for causes.`,
   Q:`Gensler's five rules for a good lexical definition. A definition should be neither <b>too broad</b> (fits non-instances) nor <b>too narrow</b> (leaves out real ones) — or <b>both</b> at once; should avoid being <b>circular</b> (defines the term with itself) or using <b>poorly understood terms</b>; should <b>match the term in vagueness</b> (not be overly precise); should <b>match its emotional tone</b> (no added positive/negative slant); and should include only <b>essential properties</b> (no accidental features). Use the interchange test: swap the term and its definition in sentences and see if the meaning stays the same.`,
-  R:`Eighteen informal fallacies in four groups. <b>Defects of a good argument:</b> circular (question begging) · ambiguous · appeal to emotion · beside the point · straw man. <b>Premise-conclusion patterns:</b> appeal to the crowd · appeal to ignorance · part-whole · genetic · opposition · post hoc ergo propter hoc. <b>Correct-or-faulty forms</b> (fine when their conditions are met, fallacious otherwise): appeal to authority · ad hominem · pro-con. <b>Others:</b> appeal to force · black and white thinking · complex question · false stereotype. Ask what the passage substitutes for real evidence.`
+  R:`Eighteen informal fallacies in four groups. <b>Defects of a good argument:</b> circular (question begging) · ambiguous · appeal to emotion · beside the point · straw man. <b>Premise-conclusion patterns:</b> appeal to the crowd · appeal to ignorance · part-whole · genetic · opposition · post hoc ergo propter hoc. <b>Correct-or-faulty forms</b> (fine when their conditions are met, fallacious otherwise): appeal to authority · ad hominem · pro-con. <b>Others:</b> appeal to force · black and white thinking · complex question · false stereotype. Ask what the passage substitutes for real evidence.`,
+  S:`<b>∈</b> membership ("is one of") vs <b>⊆</b> subset ("every member of … is a member of …") — never confuse them: 1 ∈ {1,2} but {1} ⊆ {1,2}. <b>∅</b> is the empty set; ∅ ⊆ A for every A, and {∅} ≠ ∅. A set is fixed by its members alone (<b>extensionality</b>): order and repetition don't matter. Operations: A ∪ B (in either), A ∩ B (in both), A − B (in A but not B), A′ (in the universe U but not A). <b>P(A)</b> = the set of all subsets of A; |P(A)| = 2<sup>|A|</sup>. Ordered pairs (a,b) care about order; A × B = all pairs with first member from A, second from B. When typing a set, use braces and commas — {1, 3} — and ∅ or {} for the empty set; member order doesn't matter.`,
+  T:`<b>Syntax</b> is about shape (wff, proof, main connective); <b>semantics</b> is about truth under interpretations (tautology, validity, ${'⊨'}). The <b>object language</b> is the language studied; the <b>metalanguage</b> is the language we study it in — "wff," "valid," and "⊢" are metalanguage. To talk about an expression, quote it: Boston is a city, but 'Boston' has six letters. The grammar used here: (1) any capital letter is a wff; (2) if P is a wff so is its negation; (3) if P and Q are wffs so is (P # Q) for each binary connective, parentheses included; nothing else is a wff. In the <b>regimented English</b> activity, quantifier phrases are pulled to the front in scope order, each as "every/some … is such that …," and pronouns act as bound variables.`,
 };
 
 /* ---- help ---- two-level navigator. The main Help page is a menu of section
@@ -8000,7 +9121,16 @@ const HELP_EX={
   O:()=>`From ${wff(SYM.not+'u:A')} derive ${wff('u '+SYM.therefore+' '+SYM.not+'A')} with a NEW string of u's (rule B−).<br>From ${wff('u:A')} derive ${wff('u '+SYM.therefore+' A')} with any string of u's (rule B+). Use B− first, then B+.`,
   P:()=>`Two coins: P(two heads) = ½ · ½ = <b>¼</b>.<br>Odds 3-to-1 in favor → P = 3 / (3+1) = <b>¾</b>.<br>P(not A) = 1 − P(A).`,
   Q:()=>`“A bird is an animal that flies” → <b>too broad and too narrow</b> (bats fly; penguins don't).<br>“A baker is a person who bakes” → <b>circular</b>.<br>“Bread is the staff of life” → <b>uses poorly understood (figurative) terms</b>.`,
-  R:()=>`“No one has proven it's false, so it's true” → <b>appeal to ignorance</b>.<br>“Everybody's buying it, so it must be best” → <b>appeal to the crowd</b>.<br>“You can't trust her tax plan — she's been divorced” → <b>ad hominem</b>.`
+  R:()=>`“No one has proven it's false, so it's true” → <b>appeal to ignorance</b>.<br>“Everybody's buying it, so it must be best” → <b>appeal to the crowd</b>.<br>“You can't trust her tax plan — she's been divorced” → <b>ad hominem</b>.`,
+  S:()=>`U = {1,2,3,4,5,6}, A = {1,2,3}, B = {2,3,5}.<br>
+A ∪ B = {1,2,3,5} · A ∩ B = {2,3} · A − B = {1} · A′ = {4,5,6}.<br>
+P({1,2}) = {∅, {1}, {2}, {1,2}} — 2<sup>2</sup> = 4 subsets.<br>
+{1,2} × {a} = {(1,a), (2,a)} — 2·1 = 2 pairs.`,
+  T:()=>`Regimenting "Every critic reviewed some book" (reading: the book may vary):<br>
+<b>Every critic is such that some book is such that he reviewed it.</b><br>
+Same sentence, other reading (one book for all):<br>
+<b>Some book is such that every critic is such that he reviewed it.</b><br>
+The unregimented sentence is scope-ambiguous; each regimentation — like each wff — has exactly one reading.`,
 };
 function helpGuide(id){
   const M=MENU[id]||{};

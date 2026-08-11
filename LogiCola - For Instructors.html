@@ -4193,13 +4193,13 @@ function makeK_legacy(){ // superseded by the generative modal engine below (kep
 }
 const GALACTIC=[
   {p:`◊◊A`, c:`◊A`, sys:['S4','S5'], why:'needs a series of tickets (# ⇒ W ⇒ WW), so S4 or S5'},
-  {p:`☐A`, c:`☐☐A`, sys:['S4','S5'], why:'what is necessary must be necessarily necessary only if tickets chain (S4) or travel is free (S5)'},
+  {p:`☐A`, c:`☐☐A`, sys:['S4','S5'], why:'holds only where tickets chain (S4) or travel is free (S5) — otherwise the second box has nowhere to drop'},
   {p:`A`, c:`☐◊A`, sys:['B','S5'], why:'requires using a ticket backwards (B) or free travel (S5)'},
-  {p:`◊A`, c:`☐◊A`, sys:['S5'], why:'only S5\'s unrestricted travel validates this'},
+  {p:`◊A`, c:`☐◊A`, sys:['S5'], why:'needs S5\'s unrestricted travel — nothing weaker will do'},
   {p:`◊☐A`, c:`A`, sys:['B','S5'], why:'needs a backwards ticket (B) or free travel (S5)'},
-  {p:`◊☐A`, c:`☐A`, sys:['S5'], why:'distinctive of S5'},
-  {p:`☐A`, c:`A`, sys:['T','S4','B','S5'], why:'every system lets a box drop into its own world'},
-  {p:`☐A`, c:`◊A`, sys:['T','S4','B','S5'], why:'valid in all these systems'},
+  {p:`◊☐A`, c:`☐A`, sys:['S5'], why:'is distinctive of S5 — only free travel gets the box back to where you started'},
+  {p:`☐A`, c:`A`, sys:['T','S4','B','S5'], why:'holds everywhere, since every system lets a box drop into its own world'},
+  {p:`☐A`, c:`◊A`, sys:['T','S4','B','S5'], why:'holds everywhere: whatever is necessary is at least possible'},
 ];
 function kGalactic(){
   const g=pick(GALACTIC);

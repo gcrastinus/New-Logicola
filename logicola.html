@@ -56,6 +56,21 @@
   .choice.good{background:#134e2c;border-color:var(--good);color:#daffe6}
   .choice.bad{background:#4e1919;border-color:var(--bad);color:#ffdede;opacity:.85}
   .choice.good .num{color:var(--good)}
+  /* Set R: full fallacy list — scrolls inside a fixed frame; problem text stays above */
+  .picklist{margin-top:14px}
+  .picklist-label{font-size:13px;color:var(--muted);margin:0 0 6px;text-transform:uppercase;letter-spacing:.4px}
+  .picklist-scroll{max-height:11.5em;overflow-y:auto;overflow-x:hidden;border:1px solid var(--line);
+    border-radius:10px;background:#0b2438;scrollbar-width:thin;scrollbar-color:var(--line) #0b2438}
+  .picklist-item{display:block;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);
+    color:var(--ink);padding:11px 14px;font-size:16px;line-height:1.35;cursor:pointer}
+  .picklist-item:last-child{border-bottom:0}
+  .picklist-item:hover{background:var(--btn)}
+  .picklist-item.sel{background:var(--btn);box-shadow:inset 3px 0 0 var(--accent);color:var(--accent);font-weight:700}
+  .picklist-item.good{background:#134e2c;color:#daffe6;box-shadow:inset 3px 0 0 var(--good)}
+  .picklist-item.bad{background:#4e1919;color:#ffdede;box-shadow:inset 3px 0 0 var(--bad)}
+  .picklist-item:disabled{cursor:default;opacity:.95}
+  .picklist-actions{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center}
+  .picklist-actions .muted{font-size:13px}
   .typewrap{margin-top:14px}
   .answerbox{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}
   input.ans{flex:1;min-width:180px;font-size:20px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);
@@ -5473,29 +5488,28 @@ const FALLACIES=[
    ex:['"Have you stopped cutting corners on your homework?"',
        '"When did your department begin wasting public funds?"']},
 ];
+function rFallacyList(){ return FALLACIES.map(f=>f.name); }
 function rSpot(){
   const pairs=FALLACIES.flatMap(fl=>fl.ex.map(e=>({f:fl, e})));
   const pk=pickFresh('Rspot', pairs, x=>x.e);
   const f=pk.f;
-  const others=sampleDistinct(FALLACIES.filter(x=>x.name!==f.name),3);
   return {
     setLine:'Set R — Fallacies (spot the fallacy)',
     prompt:`Which fallacy does this commit?<br><span class="argblock"><i>${pk.e}</i></span>`,
-    instr:'Identify the informal fallacy. Ask: does the passage give real evidence for its conclusion — or lean on feelings, persons, popularity, origins, threats, ambiguity, or an assumption of the conclusion itself?',
-    mode:'mc', noKeyboard:true,
-    choices: mc(f.name, others.map(o=>o.name)),
+    instr:'Scroll the list and pick the fallacy. All eighteen names are there — as in Gensler’s LogiCola. Ask: does the passage give real evidence, or lean on feelings, persons, popularity, origins, threats, ambiguity, or an assumption of the conclusion itself?',
+    mode:'picklist', noKeyboard:true,
+    options:rFallacyList(), answer:f.name,
     explain:()=>`This is <b>${f.name.toLowerCase()}</b> — it ${f.def}.`
   };
 }
 function rMatch(){
   const f=pickFresh('Rmatch', FALLACIES, x=>x.name);
-  const others=sampleDistinct(FALLACIES.filter(x=>x.name!==f.name),3);
   return {
     setLine:'Set R — Fallacies (definitions)',
     prompt:`Which fallacy is this?<br><span class="argblock"><i>An argument that ${f.def}.</i></span>`,
-    instr:'Match the description to the fallacy\'s name.',
-    mode:'mc', noKeyboard:true,
-    choices: mc(f.name, others.map(o=>o.name)),
+    instr:'Scroll the full list of fallacy names and pick the one that matches the description.',
+    mode:'picklist', noKeyboard:true,
+    options:rFallacyList(), answer:f.name,
     explain:()=>`<b>${f.name}</b> ${f.def}. Example: <i>${f.ex[0]}</i>`
   };
 }
@@ -8330,31 +8344,31 @@ function fileMenu(){
   };
   const toolUnlocked=(state.completed.G||0)>=9;
   const toolBtn= toolUnlocked
-    ? `<button class="setbtn tool" style="border-color:#2dd4bf;background:linear-gradient(160deg,rgba(45,212,191,0.16),rgba(45,212,191,0.05))" onclick="closeModal();launchCopiChecker()">
-      <span class="id" style="color:#2dd4bf">🛠 Tool</span><span class="nm">Proof Builder Tool</span>
-      <span class="ch">Prove your own arguments · ungraded</span></button>`
-    : `<button class="setbtn tool" style="border-color:#2dd4bf;opacity:.45;cursor:not-allowed" title="Master Set G at level 9 to unlock" onclick="event.preventDefault()">
-      <span class="id" style="color:#2dd4bf">🔒 Tool</span><span class="nm">Proof Builder Tool</span>
+    ? `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;background:linear-gradient(160deg,rgba(45,212,191,0.16),rgba(45,212,191,0.05))" onclick="closeModal();launchCopiChecker()">
+      <span class="id" style="color:#2dd4bf">🛠 Tool</span><span class="nm">Propositional Proof Builder</span>
+      <span class="ch">Set G · prove your own arguments · ungraded</span></button>`
+    : `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;opacity:.45;cursor:not-allowed" title="Master Set G at level 9 to unlock" onclick="event.preventDefault()">
+      <span class="id" style="color:#2dd4bf">🔒 Tool</span><span class="nm">Propositional Proof Builder</span>
       <span class="ch">Unlocks when you master Set G at level 9</span></button>`;
-  const ktoolUnlocked=(state.completed.K||0)>=9;
-  const ktoolBtn= ktoolUnlocked
-    ? `<button class="setbtn tool" style="border-color:#2dd4bf;background:linear-gradient(160deg,rgba(45,212,191,0.16),rgba(45,212,191,0.05))" onclick="closeModal();launchModalChecker()">
-      <span class="id" style="color:#2dd4bf">🛠 Tool</span><span class="nm">Modal Proof Builder</span>
-      <span class="ch">Prove your own modal arguments — any system · ungraded</span></button>`
-    : `<button class="setbtn tool" style="border-color:#2dd4bf;opacity:.45;cursor:not-allowed" title="Master Set K at level 9 to unlock" onclick="event.preventDefault()">
-      <span class="id" style="color:#2dd4bf">🔒 Tool</span><span class="nm">Modal Proof Builder</span>
-      <span class="ch">Unlocks when you master Set K at level 9</span></button>`;
   const qtoolUnlocked=(state.completed.I||0)>=9;
   const qtoolBtn= qtoolUnlocked
-    ? `<button class="setbtn tool" style="border-color:#2dd4bf;background:linear-gradient(160deg,rgba(45,212,191,0.16),rgba(45,212,191,0.05))" onclick="closeModal();launchQuantChecker()">
-      <span class="id" style="color:#2dd4bf">🛠 Tool</span><span class="nm">Predicate Proof Builder</span>
-      <span class="ch">Prove your own quantificational arguments · ungraded</span></button>`
-    : `<button class="setbtn tool" style="border-color:#2dd4bf;opacity:.45;cursor:not-allowed" title="Master Set I at level 9 to unlock" onclick="event.preventDefault()">
-      <span class="id" style="color:#2dd4bf">🔒 Tool</span><span class="nm">Predicate Proof Builder</span>
+    ? `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;background:linear-gradient(160deg,rgba(45,212,191,0.16),rgba(45,212,191,0.05))" onclick="closeModal();launchQuantChecker()">
+      <span class="id" style="color:#2dd4bf">🛠 Tool</span><span class="nm">Quantificational Proof Builder</span>
+      <span class="ch">Set I · prove your own quantificational arguments · ungraded</span></button>`
+    : `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;opacity:.45;cursor:not-allowed" title="Master Set I at level 9 to unlock" onclick="event.preventDefault()">
+      <span class="id" style="color:#2dd4bf">🔒 Tool</span><span class="nm">Quantificational Proof Builder</span>
       <span class="ch">Unlocks when you master Set I at level 9</span></button>`;
+  const ktoolUnlocked=(state.completed.K||0)>=9;
+  const ktoolBtn= ktoolUnlocked
+    ? `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;background:linear-gradient(160deg,rgba(45,212,191,0.16),rgba(45,212,191,0.05))" onclick="closeModal();launchModalChecker()">
+      <span class="id" style="color:#2dd4bf">🛠 Tool</span><span class="nm">Modal Proof Builder</span>
+      <span class="ch">Set K · prove your own modal arguments — any system · ungraded</span></button>`
+    : `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;opacity:.45;cursor:not-allowed" title="Master Set K at level 9 to unlock" onclick="event.preventDefault()">
+      <span class="id" style="color:#2dd4bf">🔒 Tool</span><span class="nm">Modal Proof Builder</span>
+      <span class="ch">Unlocks when you master Set K at level 9</span></button>`;
   const gHtml=([title,ch,ids])=>
     `<h3 style="margin:18px 0 2px">${title} <span class="muted" style="font-weight:400;font-size:13px">· ${ch}</span></h3>
-     <div class="grid">${ids.filter(id=>SETS[id]).map(btn).join('')}${ids.includes('G')?toolBtn:''}${ids.includes('I')?qtoolBtn:''}${ids.includes('K')?ktoolBtn:''}</div>`;
+     <div class="grid">${ids.filter(id=>SETS[id]).map(btn).join('')}</div>`;
   const groups   = SET_GROUPS.filter(g=>g[0]!=='Sets and Metatheory').map(gHtml).join('');
   // S & T: same set buttons, but a clear break from the chapter list (not a book supplement)
   const smIds = (SET_GROUPS.find(g=>g[0]==='Sets and Metatheory')||[,,[]])[2]||[];
@@ -8364,15 +8378,20 @@ function fileMenu(){
       <p class="muted" style="font-size:12.5px;margin:0 0 10px;line-height:1.45">Optional extras beyond the chapter exercises — set theory background and formal languages / metatheory. Same scoring as the other sets.</p>
       <div class="grid">${smIds.filter(id=>SETS[id]).map(btn).join('')}</div>
     </div>` : '';
+  // Proof builders: separate Tools block (still level-9 gated), above Explore
+  const toolsBtn = `<h3 style="margin:22px 0 2px">Tools <span class="muted" style="font-weight:400;font-size:13px">· proof builders · optional</span></h3>
+    <p class="muted" style="font-size:12.5px;margin:0 0 8px;line-height:1.45">Optional workspaces for writing your own proofs (ungraded). Unlock each by mastering the matching set at level 9.</p>
+    <div class="grid">${toolBtn}${qtoolBtn}${ktoolBtn}</div>`;
   const dUnlocked=(state.completed.I||0)>=9;
   const deviantBtn = `<h3 style="margin:22px 0 2px">Explore · Non-Classical Logic</h3><div class="grid">`+ (dUnlocked
-    ? `<button class="setbtn tool" style="border-color:#a78bfa;background:linear-gradient(160deg,rgba(167,139,250,0.16),rgba(167,139,250,0.05))" onclick="closeModal();launchDeviant()"><span class="id" style="color:#a78bfa">◆ Tool</span><span class="nm">Non-Classical Workbench</span><span class="ch">Free · intuitionistic · medieval term logic — validity checker &amp; proof builder · ungraded</span></button>`
-    : `<button class="setbtn tool" style="border-color:#a78bfa;opacity:.45;cursor:not-allowed" title="Master Set I at level 9 to unlock" onclick="event.preventDefault()"><span class="id" style="color:#a78bfa">🔒 Tool</span><span class="nm">Non-Classical Workbench</span><span class="ch">Unlocks when you master Set I at level 9</span></button>`)
+    ? `<button type="button" class="setbtn tool" style="border-color:#a78bfa;background:linear-gradient(160deg,rgba(167,139,250,0.16),rgba(167,139,250,0.05))" onclick="closeModal();launchDeviant()"><span class="id" style="color:#a78bfa">◆ Tool</span><span class="nm">Non-Classical Workbench</span><span class="ch">Free · intuitionistic · medieval term logic — validity checker &amp; proof builder · ungraded</span></button>`
+    : `<button type="button" class="setbtn tool" style="border-color:#a78bfa;opacity:.45;cursor:not-allowed" title="Master Set I at level 9 to unlock" onclick="event.preventDefault()"><span class="id" style="color:#a78bfa">🔒 Tool</span><span class="nm">Non-Classical Workbench</span><span class="ch">Unlocks when you master Set I at level 9</span></button>`)
     + `</div>`;
-  openModal(`<button class="close" onclick="closeModal()">×</button>
+  openModal(`<button type="button" class="close" onclick="closeModal()">×</button>
     <h2>Load Exercise Set</h2>
-    <div class="rowbtns" style="margin:0 0 8px"><button class="ghost" onclick="openModal(optForm(false))">Options — name, scoring, sound &amp; technical settings</button></div>
+    <div class="rowbtns" style="margin:0 0 8px"><button type="button" class="ghost" onclick="openModal(optForm(false))">Options — name, scoring, sound &amp; technical settings</button></div>
     ${groups}
+    ${toolsBtn}
     ${deviantBtn}
     ${smGroups}`);
 }
@@ -8472,33 +8491,46 @@ const MENU={
            ['meta','Metatheory','Soundness, completeness, decidability, Gödel'],
            ['reg','Regimented English','Scope made visible in English itself — Montague &amp; Klima']]},
 };
+function menuActBtn(selected, a){
+  if(!a||!a.length) return '';
+  return `<button type="button" class="setbtn ${selected===a[0]?'sel':''}" data-menuact="${a[0]}">
+      <span class="id" style="font-size:14px">${a[1]}</span><span class="ch">${a[2]}</span></button>`;
+}
+function ensureMenuMode(id){
+  const M=MENU[id]; if(!M) return;
+  if(M.key&&M.acts&&M.acts.length){
+    if(!M.acts.some(a=>a[0]===state[M.key])) state[M.key]=M.acts[0][0];
+  }
+  if(M.diffKey){
+    const ok=['easier','harder','mixed'].includes(state[M.diffKey]);
+    if(!ok) state[M.diffKey]='easier';
+  }
+}
 function gMenuBody(){
   const lvl=state.gLevel||'easier', m=state.gMode||'both';
   const proofSel=['valid','invalid','both'].includes(m);
-  const acts={}; MENU.G.acts.forEach(a=>acts[a[0]]=a);
-  const actBtn=a=>`<button class="setbtn ${m===a[0]?'sel':''}" data-menuact="${a[0]}">
-      <span class="id" style="font-size:14px">${a[1]}</span><span class="ch">${a[2]}</span></button>`;
+  const acts={}; (MENU.G.acts||[]).forEach(a=>{ if(a&&a[0]) acts[a[0]]=a; });
   const offCss='opacity:.4;pointer-events:none';
   return `
     <h3 style="margin-bottom:4px">Difficulty</h3>
     <div class="toggle-row" id="diffRow">
-      <button class="toggle ${lvl==='easier'?'on':''}" data-diff="easy">Easier</button>
-      <button class="toggle ${lvl==='harder'?'on':''}" data-diff="hard">Harder</button>
-      <button class="toggle ${lvl==='mixed'?'on':''}" data-diff="mixed">Mixed</button></div>
+      <button type="button" class="toggle ${lvl==='easier'?'on':''}" data-diff="easy">Easier</button>
+      <button type="button" class="toggle ${lvl==='harder'?'on':''}" data-diff="hard">Harder</button>
+      <button type="button" class="toggle ${lvl==='mixed'?'on':''}" data-diff="mixed">Mixed</button></div>
     <h3>Formal proofs</h3>
-    <div class="grid">${['valid','invalid','both'].map(k=>actBtn(acts[k])).join('')}</div>
+    <div class="grid">${['valid','invalid','both'].map(k=>menuActBtn(m, acts[k])).join('')}</div>
     ${proofOptsHtml('gProofOpts', proofSel)}
     <h3>Copi proofs</h3>
-    <div class="grid">${actBtn(acts.copi)}</div>
+    <div class="grid">${menuActBtn(m, acts.copi)}</div>
     <h3>Truth trees</h3>
-    <div class="grid">${actBtn(acts.tree)}</div>
+    <div class="grid">${menuActBtn(m, acts.tree)}</div>
     <div id="gTreeOpts" style="margin-top:10px;${m==='tree'?'':offCss}">
       <div class="toggle-row">
-        <button class="toggle ${state.treeClose!=='auto'?'on':''}" data-tclose="manual">I close branches</button>
-        <button class="toggle ${state.treeClose==='auto'?'on':''}" data-tclose="auto">Close branches for me</button></div>
+        <button type="button" class="toggle ${state.treeClose!=='auto'?'on':''}" data-tclose="manual">I close branches</button>
+        <button type="button" class="toggle ${state.treeClose==='auto'?'on':''}" data-tclose="auto">Close branches for me</button></div>
       <div class="toggle-row" style="margin-top:6px">
-        <button class="toggle ${!state.treeDN?'on':''}" data-tdn="manual">Show double negations</button>
-        <button class="toggle ${state.treeDN?'on':''}" data-tdn="auto">Auto double negation</button></div>
+        <button type="button" class="toggle ${!state.treeDN?'on':''}" data-tdn="manual">Show double negations</button>
+        <button type="button" class="toggle ${state.treeDN?'on':''}" data-tdn="auto">Auto double negation</button></div>
     </div>`;
 }
 function gMenuSync(){
@@ -8521,9 +8553,7 @@ function proofOptsHtml(domId, active){
 }
 function iMenuBody(){
   const lvl=state.iMode||'easier', kind=state.iKind||'both';
-  const actBtn=a=>`<button class="setbtn ${kind===a[0]?'sel':''}" data-menuact="${a[0]}">
-      <span class="id" style="font-size:14px">${a[1]}</span><span class="ch">${a[2]}</span></button>`;
-  const lvlBtn=(v,label,desc)=>`<button class="setbtn ${lvl===v?'sel':''}" data-ilvl="${v}">
+  const lvlBtn=(v,label,desc)=>`<button type="button" class="setbtn ${lvl===v?'sel':''}" data-ilvl="${v}">
       <span class="id" style="font-size:14px">${label}</span><span class="ch">${desc}</span></button>`;
   return `
     <h3>Level</h3>
@@ -8536,7 +8566,7 @@ function iMenuBody(){
       ${lvlBtn('all','Everything','Predicates, relations, and identity together')}
     </div>
     <h3>Activity</h3>
-    <div class="grid">${MENU.I.acts.map(actBtn).join('')}</div>
+    <div class="grid">${(MENU.I.acts||[]).map(a=>menuActBtn(kind,a)).join('')}</div>
     ${proofOptsHtml('iProofOpts', kind!=='copi')}`;
 }
 function iMenuSync(){
@@ -8547,9 +8577,7 @@ function iMenuSync(){
 function kMenuBody(){
   const lvl=state.kLevel||'easier', m=state.kMode||'both';
   const proofSel=['valid','invalid','both'].includes(m);
-  const acts={}; MENU.K.acts.forEach(a=>acts[a[0]]=a);
-  const actBtn=a=>`<button class="setbtn ${m===a[0]?'sel':''}" data-menuact="${a[0]}">
-      <span class="id" style="font-size:14px">${a[1]}</span><span class="ch">${a[2]}</span></button>`;
+  const acts={}; (MENU.K.acts||[]).forEach(a=>{ if(a&&a[0]) acts[a[0]]=a; });
   const offCss='opacity:.4;pointer-events:none';
   const SYSD={
     S5:'Free travel — boxes drop into any world, no tickets needed. (What the proof activities assume.)',
@@ -8559,21 +8587,21 @@ function kMenuBody(){
   return `
     <h3 style="margin-bottom:4px">Difficulty <span class="muted" style="font-weight:400;font-size:12px">· applies to the modal-proof activities</span></h3>
     <div class="toggle-row" id="diffRow" style="${proofSel?'':offCss}">
-      <button class="toggle ${lvl==='easier'?'on':''}" data-diff="easy">Easier</button>
-      <button class="toggle ${lvl==='harder'?'on':''}" data-diff="hard">Harder</button>
-      <button class="toggle ${lvl==='mixed'?'on':''}" data-diff="mixed">Mixed</button></div>
+      <button type="button" class="toggle ${lvl==='easier'?'on':''}" data-diff="easy">Easier</button>
+      <button type="button" class="toggle ${lvl==='harder'?'on':''}" data-diff="hard">Harder</button>
+      <button type="button" class="toggle ${lvl==='mixed'?'on':''}" data-diff="mixed">Mixed</button></div>
     <h3>Modal proofs</h3>
-    <div class="grid">${['valid','invalid','both'].map(k=>actBtn(acts[k])).join('')}</div>
+    <div class="grid">${['valid','invalid','both'].map(k=>menuActBtn(m, acts[k])).join('')}</div>
     ${proofOptsHtml('kProofOpts', proofSel||m==='quant')}
     <h3>Galactic travel <span class="info-ic" tabindex="0">i<span class="tip"><b>The idea:</b> ${SYM.box}A means A is true in every world you can reach from here; ${SYM.diamond}A means A is true in at least one reachable world. The systems below differ only in which worlds count as reachable (the <b>accessibility relation</b>) — the ticket rules act that out.<br><br><b>T</b> — you can always stay home; anywhere else needs a ticket. <i>(relation: reflexive)</i><br><b>S4</b> — tickets also chain together. <i>(reflexive + transitive)</i><br><b>B</b> — a ticket also works in reverse. <i>(reflexive + symmetric)</i><br><b>S5</b> — every world reaches every world; free travel. <i>(reflexive + symmetric + transitive — an equivalence relation)</i><br><br>T/S4/B fit necessity with real limits, like what's known or required; S5 fits necessity with none, like logical truth.</span></span></h3>
-    <div class="grid">${actBtn(acts.galactic)}</div>
+    <div class="grid">${menuActBtn(m, acts.galactic)}</div>
     <div id="kSysOpts" style="margin-top:10px;${m==='galactic'?'':offCss}">
-      <div class="grid">${['S5','T','S4','B'].map(s2=>`<button class="setbtn ${(state.modalSystem||'S5')===s2?'sel':''}" data-msys="${s2}">
+      <div class="grid">${['S5','T','S4','B'].map(s2=>`<button type="button" class="setbtn ${(state.modalSystem||'S5')===s2?'sel':''}" data-msys="${s2}">
         <span class="id" style="font-size:14px">${s2}</span><span class="ch">${SYSD[s2]}</span></button>`).join('')}</div>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Your instructor may tell you which system to use — the choice is recorded with your score.</p>
     </div>
     <h3>Quantified modal proofs</h3>
-    <div class="grid">${actBtn(acts.quant)}</div>`;
+    <div class="grid">${menuActBtn(m, acts.quant)}</div>`;
 }
 function kMenuSync(){
   const m=state.kMode||'both';
@@ -8584,65 +8612,73 @@ function kMenuSync(){
   set(modal.querySelector('#kSysOpts'), m==='galactic');
 }
 function openSetMenu(id){
-  const M=MENU[id]||{};
   const s=SETS[id];
+  if(!s){ openModal(`<button class="close" onclick="closeModal()">×</button><h2>Unknown set</h2><p class="muted">Set ${id} is not available.</p><div class="rowbtns"><button class="ghost" onclick="fileMenu()">← Exercise Sets</button></div>`); return; }
+  const M=MENU[id]||{};
+  ensureMenuMode(id);
   let body='';
-  if(M.intro) body+=(M.intro===true?defIntroHtml():M.intro());
-  if(M.study){
-    body+=`<div style="margin:0 0 14px"><button type="button" class="setbtn" data-study="1" style="width:100%;text-align:left">
-      <span class="id" style="font-size:14px">${M.study.label}</span>
-      <span class="ch">Optional overview — open the study card</span></button></div>`;
+  try{
+    if(M.intro) body+=(M.intro===true?defIntroHtml():M.intro());
+    if(M.study){
+      body+=`<div style="margin:0 0 14px"><button type="button" class="setbtn" data-study="1" style="width:100%;text-align:left">
+        <span class="id" style="font-size:14px">${M.study.label}</span>
+        <span class="ch">Optional overview — open the study card</span></button></div>`;
+    }
+    if(M.layout==='G'){
+      body+=gMenuBody();
+    } else if(M.layout==='I'){
+      body+=iMenuBody();
+    } else if(M.layout==='K'){
+      body+=kMenuBody();
+    } else {
+      if(M.acts&&M.acts.length){
+        const cur=state[M.key];
+        body+=`<h3>Activity</h3><div class="grid">${M.acts.map(a=>menuActBtn(cur,a)).join('')}</div>`;
+      }
+      if(M.diff||M.diffKey){
+        const cur = M.diffKey ? (state[M.diffKey]||'easier') : (state.harder?'harder':'easier');
+        const off = (M.noDiffActs||[]).includes(state[M.key]);
+        body+=`<h3 style="margin-bottom:4px">Difficulty <span id="diffNote" class="muted" style="font-weight:400;font-size:12px">${off?'· one level for this activity':''}</span></h3>
+          <div class="toggle-row" id="diffRow" style="${off?'opacity:.4;pointer-events:none':''}">
+          <button type="button" class="toggle ${cur==='easier'?'on':''}" data-diff="easy">Easier</button>
+          <button type="button" class="toggle ${cur==='harder'?'on':''}" data-diff="hard">Harder</button>
+          ${M.diff3?`<button type="button" class="toggle ${cur==='mixed'?'on':''}" data-diff="mixed">Mixed</button>`:''}</div>`;
+      }
+      if(M.modalOpt){
+        const off=state[M.key]!=='galactic';
+        body+=`<h3 style="margin-bottom:4px">Modal system <span id="msysNote" class="muted" style="font-weight:400;font-size:12px">${off?'· applies to the galactic-travel activity':''}</span></h3>
+          <div class="toggle-row" id="msysRow" style="${off?'opacity:.4;pointer-events:none':''}">
+          ${['S5','T','S4','B'].map(s2=>`<button type="button" class="toggle ${(state.modalSystem||'S5')===s2?'on':''}" data-msys="${s2}">${s2}</button>`).join('')}</div>
+          <p class="muted" style="font-size:12px;margin:6px 0 0"><b>S5</b> allows travel between any worlds; <b>T</b>, <b>S4</b>, and <b>B</b> restrict box-dropping with travel tickets. Your instructor may tell you which system to use — it's recorded with your score.</p>`;
+      }
+    } // end non-G/I/K layout
+    if(M.type){
+      body+=`<h3>Answers</h3><div class="toggle-row">
+        <button type="button" class="toggle ${!state.type?'on':''}" data-ans="mc">Multiple choice</button>
+        <button type="button" class="toggle ${state.type?'on':''}" data-ans="type">Type the answer</button></div>`;
+    }
+    if(M.hintOpt){
+      const on=state.hHints!==false;
+      body+=`<h3 style="margin-bottom:4px">Loglish hints</h3>
+        <div class="toggle-row">
+          <button type="button" class="toggle ${on?'on':''}" data-hhint="on">On</button>
+          <button type="button" class="toggle ${!on?'on':''}" data-hhint="off">Off</button></div>
+        <p class="muted" style="font-size:12px;margin:6px 0 0">Loglish is Gensler's halfway house between English and symbols — "For all x: if x is I, then x is L." Hints fade as your score builds: full below 40 points, behind a click to 69, gone from 70.</p>`;
+    }
+    if(M.modelNote) body+=`<p class="muted" style="margin-top:12px">Validity model: <b style="color:var(--accent)">${state.bImport==='traditional'?'Traditional (existential import)':'Modern (no existential import)'}</b> — change it in Options on the exercise-set page.</p>`;
+    if(!body.trim()){
+      body=`<p class="muted">No activity choices for this set — press <b>Start</b> to begin.</p>`;
+    }
+  }catch(err){
+    console.error('openSetMenu', id, err);
+    body=`<p class="muted">Couldn’t build the activity menu for Set ${id}. Try again, or pick another set.</p>`;
   }
-  if(M.layout==='G'){
-    body+=gMenuBody();
-  } else if(M.layout==='I'){
-    body+=iMenuBody();
-  } else if(M.layout==='K'){
-    body+=kMenuBody();
-  } else {
-  if(M.acts){
-    const cur=state[M.key];
-    body+=`<h3>Activity</h3><div class="grid">${M.acts.map(a=>
-      `<button class="setbtn ${cur===a[0]?'sel':''}" data-menuact="${a[0]}">
-        <span class="id" style="font-size:14px">${a[1]}</span><span class="ch">${a[2]}</span></button>`).join('')}</div>`;
-  }
-  if(M.diff||M.diffKey){
-    const cur = M.diffKey ? (state[M.diffKey]||'easier') : (state.harder?'harder':'easier');
-    const off = (M.noDiffActs||[]).includes(state[M.key]);
-    body+=`<h3 style="margin-bottom:4px">Difficulty <span id="diffNote" class="muted" style="font-weight:400;font-size:12px">${off?'· one level for this activity':''}</span></h3>
-      <div class="toggle-row" id="diffRow" style="${off?'opacity:.4;pointer-events:none':''}">
-      <button class="toggle ${cur==='easier'?'on':''}" data-diff="easy">Easier</button>
-      <button class="toggle ${cur==='harder'?'on':''}" data-diff="hard">Harder</button>
-      ${M.diff3?`<button class="toggle ${cur==='mixed'?'on':''}" data-diff="mixed">Mixed</button>`:''}</div>`;
-  }
-  if(M.modalOpt){
-    const off=state[M.key]!=='galactic';
-    body+=`<h3 style="margin-bottom:4px">Modal system <span id="msysNote" class="muted" style="font-weight:400;font-size:12px">${off?'· applies to the galactic-travel activity':''}</span></h3>
-      <div class="toggle-row" id="msysRow" style="${off?'opacity:.4;pointer-events:none':''}">
-      ${['S5','T','S4','B'].map(s2=>`<button class="toggle ${(state.modalSystem||'S5')===s2?'on':''}" data-msys="${s2}">${s2}</button>`).join('')}</div>
-      <p class="muted" style="font-size:12px;margin:6px 0 0"><b>S5</b> allows travel between any worlds; <b>T</b>, <b>S4</b>, and <b>B</b> restrict box-dropping with travel tickets. Your instructor may tell you which system to use — it's recorded with your score.</p>`;
-  }
-  } // end non-G layout
-  if(M.type){
-    body+=`<h3>Answers</h3><div class="toggle-row">
-      <button class="toggle ${!state.type?'on':''}" data-ans="mc">Multiple choice</button>
-      <button class="toggle ${state.type?'on':''}" data-ans="type">Type the answer</button></div>`;
-  }
-  if(M.hintOpt){
-    const on=state.hHints!==false;
-    body+=`<h3 style="margin-bottom:4px">Loglish hints</h3>
-      <div class="toggle-row">
-        <button class="toggle ${on?'on':''}" data-hhint="on">On</button>
-        <button class="toggle ${!on?'on':''}" data-hhint="off">Off</button></div>
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Loglish is Gensler's halfway house between English and symbols — "For all x: if x is I, then x is L." Hints fade as your score builds: full below 40 points, behind a click to 69, gone from 70.</p>`;
-  }
-  if(M.modelNote) body+=`<p class="muted" style="margin-top:12px">Validity model: <b style="color:var(--accent)">${state.bImport==='traditional'?'Traditional (existential import)':'Modern (no existential import)'}</b> — change it in Options on the exercise-set page.</p>`;
-  openModal(`<button class="backbtn" onclick="fileMenu()" title="Back to all exercise sets">←</button>
-    <button class="close" onclick="closeModal()">×</button>
+  openModal(`<button type="button" class="backbtn" onclick="fileMenu()" title="Back to all exercise sets">←</button>
+    <button type="button" class="close" onclick="closeModal()">×</button>
     <h2>Set ${id} — ${s.name}</h2>
     <p class="muted">All choices here earn toward the same 100-point completion of Set ${id}.</p>
     ${body}
-    <div class="rowbtns"><button class="primary" onclick="startSet('${id}')">Start</button></div>`);
+    <div class="rowbtns"><button type="button" class="primary" onclick="startSet('${id}')">Start</button></div>`);
   if(M.study){
     const sb=modal.querySelector('[data-study]');
     if(sb) sb.onclick=()=>openStudyPanel(id, M.study);
@@ -8716,7 +8752,10 @@ window.startSet=function(id){
   tlog('S');
   closeModal(); updateScoreBar(); nextProblem();
 };
-window.loadSet=function(id){ openSetMenu(id); };
+window.loadSet=function(id){
+  try{ openSetMenu(id); }
+  catch(err){ console.error('loadSet', id, err); openModal(`<button type="button" class="close" onclick="closeModal()">×</button><h2>Set ${id}</h2><p class="muted">Something went wrong opening this set. Please try again.</p><div class="rowbtns"><button type="button" class="ghost" onclick="fileMenu()">← Exercise Sets</button></div>`); }
+};
 
 /* ---- problem flow ---- */
 function nextProblem(){
@@ -8737,6 +8776,7 @@ function scratchHtml(){
 }
 function renderProblem(){
   const p=session.current;
+  session.pickSel=undefined;
   let html=`<div class="card">
     <div class="setline">${p.setLine}</div>
     <div class="prompt">${p.prompt}</div>`;
@@ -8749,6 +8789,20 @@ function renderProblem(){
         <span class="txt">${c.text}</span></button>`;
     });
     html+=`</div>`;
+  } else if(p.mode==='picklist'){
+    const opts=p.options||[];
+    html+=`<div class="picklist" id="picklist">
+      <div class="picklist-label">All fallacies — scroll, then select</div>
+      <div class="picklist-scroll" id="pickScroll" role="listbox" aria-label="Fallacy names">`;
+    opts.forEach((name,i)=>{
+      html+=`<button type="button" class="picklist-item" role="option" data-i="${i}" onclick="selectPick(${i})">${name}</button>`;
+    });
+    html+=`</div>
+      <div class="picklist-actions">
+        <button type="button" class="primary" id="pickConfirm" onclick="answerPick()" disabled>Confirm selection</button>
+        <span class="muted" id="pickHint">Scroll the list · click a name · Confirm</span>
+      </div>
+    </div>`;
   } else if(p.mode==='custom'){
     html+=`<div id="customBody"></div>`;
   } else {
@@ -8832,6 +8886,52 @@ window.answerMC=function(i){
     if(t>=2) disableChoices(true);
   }
 };
+/* ---- Set R picklist (full fallacy roster in a fixed scroll frame) ---- */
+window.selectPick=function(i){
+  const p=session.current; if(!p||p.mode!=='picklist'||p.pickLocked) return;
+  const items=[...document.querySelectorAll('.picklist-item')];
+  if(!items[i]||items[i].disabled) return;
+  session.pickSel=i;
+  items.forEach((b,j)=>b.classList.toggle('sel', j===i));
+  const conf=$('pickConfirm'), hint=$('pickHint');
+  if(conf) conf.disabled=false;
+  if(hint) hint.textContent='Selected: '+p.options[i];
+};
+window.answerPick=function(){
+  const p=session.current; if(!p||p.mode!=='picklist'||p.pickLocked) return;
+  const i=session.pickSel; if(i==null||i<0) return;
+  const name=p.options[i];
+  const items=[...document.querySelectorAll('.picklist-item')];
+  session.lastAnswer=String(name).slice(0,80);
+  const ok=name===p.answer;
+  if(ok){
+    items[i].classList.add('good');
+    disablePicklist(false);
+    awardCorrect(p.explain?p.explain():'');
+  } else {
+    items[i].classList.add('bad');
+    items[i].classList.remove('sel');
+    const why=(p.diagnose&&p.diagnose(name))||'Not that one — scroll the list and try another name.';
+    const t=penalizeWrong(why, p.explain?p.explain():'');
+    if(t>=2) disablePicklist(true);
+    else {
+      // keep the list open for another try; clear selection
+      session.pickSel=undefined;
+      const conf=$('pickConfirm'), hint=$('pickHint');
+      if(conf) conf.disabled=true;
+      if(hint) hint.textContent='Try another name from the list';
+    }
+  }
+};
+function disablePicklist(revealCorrect){
+  const p=session.current; if(!p) return;
+  p.pickLocked=true;
+  const conf=$('pickConfirm'); if(conf) conf.disabled=true;
+  document.querySelectorAll('.picklist-item').forEach((b,i)=>{
+    b.onclick=null; b.disabled=true; b.classList.remove('sel');
+    if(revealCorrect && p.options[i]===p.answer) b.classList.add('good');
+  });
+}
 /* ---- type ---- */
 window.answerType=function(){
   const p=session.current; const val=$('ansInput').value; if(!val.trim()) return;
@@ -8843,6 +8943,7 @@ window.answerType=function(){
 function hintFor(p){
   if(p.mode==='tf') return 'reconsider the test described below.';
   if(p.mode==='mc') return 'eliminate the option you tried and look again.';
+  if(p.mode==='picklist') return 'scroll the full list — every fallacy name is there.';
   return 'check your symbols, parentheses, and letter case.';
 }
 function disableChoices(revealCorrect){
@@ -8856,7 +8957,8 @@ window.showAnswer=function(){
   const p=session.current; const fb=$('fb'); fb.className='feedback info show';
   if(p.reveal) p.reveal();
   fb.innerHTML=`💡 ${p.explain?p.explain():('Answer: '+wff(p.answer||''))}${nextBtn()}`;
-  disableChoices(true);
+  if(p.mode==='picklist') disablePicklist(true);
+  else disableChoices(true);
 };
 window.skipProblem=function(){ tlog('s'); nextProblem(); };
 
@@ -9025,7 +9127,7 @@ const INFO={
   O:`Belief logic generates consistency norms (an implicit "be consistent" premise is built into the rules). Belief worlds ("u", "uu", …) contain everything you're committed to accepting. <b>B−</b>: from "${SYM.not}u:A" derive "u ${SYM.therefore} ${SYM.not}A" using a NEW string of u's (star the original). <b>B+</b>: from "u:A" derive "u ${SYM.therefore} A" using any string of u's (don't star). Use B− first, B+ later. Note what fails: not-believing isn't believing-not, and believing doesn't make true.`,
   P:`Probability = favorable ÷ total equally likely cases (52 cards, 36 dice combinations, 2ⁿ coin patterns). Necessary truth = 100%; self-contradiction = 0%; P(not A)=1−P(A). Independent: P(A and B)=P(A)·P(B); dependent: multiply by P(B after A). Mutually exclusive: P(A or B)=P(A)+P(B); overlapping: subtract the overlap. Conditional: P(B|A)=P(A and B)/P(A).<br><br><b>Odds</b>: against = unfavorable/favorable ("12 to 1 against"); in favor = favorable/unfavorable; x-to-y in favor → P = x/(x+y). <b>Expected gain</b> = P(win)·payoff − P(lose)·stake; compare options by expected cost. <b>Induction</b>: statistical syllogism (N% of A's are B's; X is an A; that's all we know ∴ N% probable), sample projection, analogy — plus Mill's methods (agreement, difference, disagreement, variation) for causes.`,
   Q:`Gensler's five rules for a good lexical definition. A definition should be neither <b>too broad</b> (fits non-instances) nor <b>too narrow</b> (leaves out real ones) — or <b>both</b> at once; should avoid being <b>circular</b> (defines the term with itself) or using <b>poorly understood terms</b>; should <b>match the term in vagueness</b> (not be overly precise); should <b>match its emotional tone</b> (no added positive/negative slant); and should include only <b>essential properties</b> (no accidental features). Use the interchange test: swap the term and its definition in sentences and see if the meaning stays the same.`,
-  R:`Eighteen informal fallacies in four groups. <b>Defects of a good argument:</b> circular (question begging) · ambiguous · appeal to emotion · beside the point · straw man. <b>Premise-conclusion patterns:</b> appeal to the crowd · appeal to ignorance · part-whole · genetic · opposition · post hoc ergo propter hoc. <b>Correct-or-faulty forms</b> (fine when their conditions are met, fallacious otherwise): appeal to authority · ad hominem · pro-con. <b>Others:</b> appeal to force · black and white thinking · complex question · false stereotype. Ask what the passage substitutes for real evidence.`,
+  R:`Eighteen informal fallacies in four groups. <b>Defects of a good argument:</b> circular (question begging) · ambiguous · appeal to emotion · beside the point · straw man. <b>Premise-conclusion patterns:</b> appeal to the crowd · appeal to ignorance · part-whole · genetic · opposition · post hoc ergo propter hoc. <b>Correct-or-faulty forms</b> (fine when their conditions are met, fallacious otherwise): appeal to authority · ad hominem · pro-con. <b>Others:</b> appeal to force · black and white thinking · complex question · false stereotype.<br><br>As in Gensler’s LogiCola, <b>every problem shows the full list of names</b>. Scroll the fixed list (about five names visible at a time), click one, then Confirm. The problem text stays above the list while you scroll.`,
   S:`<b>∈</b> membership ("is one of") vs <b>⊆</b> subset ("every member of … is a member of …") — never confuse them: 1 ∈ {1,2} but {1} ⊆ {1,2}. <b>∅</b> is the empty set; ∅ ⊆ A for every A, and {∅} ≠ ∅. A set is fixed by its members alone (<b>extensionality</b>): order and repetition don't matter. Operations: A ∪ B (in either), A ∩ B (in both), A − B (in A but not B), A′ (in the universe U but not A). <b>P(A)</b> = the set of all subsets of A; |P(A)| = 2<sup>|A|</sup>. Ordered pairs (a,b) care about order; A × B = all pairs with first member from A, second from B. When typing a set, use braces and commas — {1, 3} — and ∅ or {} for the empty set; member order doesn't matter.`,
   T:`<b>Syntax</b> is about shape (wff, proof, main connective); <b>semantics</b> is about truth under interpretations (tautology, validity, ${'⊨'}). The <b>object language</b> is the language studied; the <b>metalanguage</b> is the language we study it in — "wff," "valid," and "⊢" are metalanguage. To talk about an expression, quote it: Boston is a city, but 'Boston' has six letters. The grammar used here: (1) any capital letter is a wff; (2) if P is a wff so is its negation; (3) if P and Q are wffs so is (P # Q) for each binary connective, parentheses included; nothing else is a wff. In the <b>regimented English</b> activity, quantifier phrases are pulled to the front in scope order, each as "every/some … is such that …," and pronouns act as bound variables.`,
 };
@@ -9196,12 +9298,14 @@ $('btnInfo').onclick=aboutView;
 $('btnHelp').onclick=helpView;
 $('startBtn').onclick=()=>{ if(!state.name) openModal(optForm(true)); else fileMenu(); };
 
-/* keyboard number shortcuts for MC */
+/* keyboard number shortcuts for MC; Enter confirms a Set R picklist selection */
 document.addEventListener('keydown',e=>{
   if(overlay.classList.contains('show')) return;
   const p=session.current; if(!p) return;
   if(p.mode==='mc'||p.mode==='tf'){
     if(/^[1-9]$/.test(e.key)){ const i=parseInt(e.key,10)-1; if(i<p.choices.length) answerMC(i); }
+  } else if(p.mode==='picklist' && e.key==='Enter' && session.pickSel!=null && !p.pickLocked){
+    e.preventDefault(); answerPick();
   }
 });
 

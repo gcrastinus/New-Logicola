@@ -56,19 +56,27 @@
   .choice.good{background:#134e2c;border-color:var(--good);color:#daffe6}
   .choice.bad{background:#4e1919;border-color:var(--bad);color:#ffdede;opacity:.85}
   .choice.good .num{color:var(--good)}
-  /* Set R: full fallacy list — scrolls inside a fixed frame; problem text stays above */
+  /* Set R: all 18 fallacies in two compact columns + collapsible description */
   .picklist{margin-top:14px}
   .picklist-label{font-size:13px;color:var(--muted);margin:0 0 6px;text-transform:uppercase;letter-spacing:.4px}
-  .picklist-scroll{max-height:11.5em;overflow-y:auto;overflow-x:hidden;border:1px solid var(--line);
-    border-radius:10px;background:#0b2438;scrollbar-width:thin;scrollbar-color:var(--line) #0b2438}
-  .picklist-item{display:block;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);
-    color:var(--ink);padding:11px 14px;font-size:16px;line-height:1.35;cursor:pointer}
-  .picklist-item:last-child{border-bottom:0}
-  .picklist-item:hover{background:var(--btn)}
-  .picklist-item.sel{background:var(--btn);box-shadow:inset 3px 0 0 var(--accent);color:var(--accent);font-weight:700}
-  .picklist-item.good{background:#134e2c;color:#daffe6;box-shadow:inset 3px 0 0 var(--good)}
-  .picklist-item.bad{background:#4e1919;color:#ffdede;box-shadow:inset 3px 0 0 var(--bad)}
+  .picklist-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  @media (max-width:520px){ .picklist-grid{grid-template-columns:1fr} }
+  .picklist-item{display:block;width:100%;text-align:left;background:var(--btn);border:1px solid var(--line);
+    border-radius:8px;color:var(--ink);padding:7px 10px;font-size:13.5px;line-height:1.3;cursor:pointer}
+  .picklist-item:hover{background:var(--btnh)}
+  .picklist-item.sel{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);color:var(--accent);font-weight:700}
+  .picklist-item.good{background:#134e2c;border-color:var(--good);color:#daffe6}
+  .picklist-item.bad{background:#4e1919;border-color:var(--bad);color:#ffdede}
   .picklist-item:disabled{cursor:default;opacity:.95}
+  .picklist-blurb{margin-top:10px;border:1px solid var(--line);border-radius:10px;background:#0b2438;overflow:hidden}
+  .picklist-blurb>summary{list-style:none;cursor:pointer;padding:9px 12px;color:var(--muted);font-size:13px;
+    user-select:none;display:flex;align-items:center;gap:8px}
+  .picklist-blurb>summary::-webkit-details-marker{display:none}
+  .picklist-blurb>summary .chev{display:inline-block;transition:transform .15s;color:var(--accent);font-size:11px}
+  .picklist-blurb[open]>summary .chev{transform:rotate(90deg)}
+  .picklist-blurb>summary:hover{color:var(--ink)}
+  .picklist-blurb-body{padding:0 12px 11px;font-size:14px;line-height:1.55;color:var(--ink)}
+  .picklist-blurb-body b{color:var(--accent)}
   .picklist-actions{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center}
   .picklist-actions .muted{font-size:13px}
   .typewrap{margin-top:14px}
@@ -5488,7 +5496,7 @@ const FALLACIES=[
    ex:['"Have you stopped cutting corners on your homework?"',
        '"When did your department begin wasting public funds?"']},
 ];
-function rFallacyList(){ return FALLACIES.map(f=>f.name); }
+function rFallacyList(){ return FALLACIES.map(f=>({name:f.name, def:f.def})); }
 function rSpot(){
   const pairs=FALLACIES.flatMap(fl=>fl.ex.map(e=>({f:fl, e})));
   const pk=pickFresh('Rspot', pairs, x=>x.e);
@@ -5496,7 +5504,7 @@ function rSpot(){
   return {
     setLine:'Set R — Fallacies (spot the fallacy)',
     prompt:`Which fallacy does this commit?<br><span class="argblock"><i>${pk.e}</i></span>`,
-    instr:'Scroll the list and pick the fallacy. All eighteen names are there — as in Gensler’s LogiCola. Ask: does the passage give real evidence, or lean on feelings, persons, popularity, origins, threats, ambiguity, or an assumption of the conclusion itself?',
+    instr:'All eighteen names are listed — as in Gensler’s LogiCola. Click one to see its brief description, then Confirm. Ask: does the passage give real evidence, or lean on feelings, persons, popularity, origins, threats, ambiguity, or an assumption of the conclusion itself?',
     mode:'picklist', noKeyboard:true,
     options:rFallacyList(), answer:f.name,
     explain:()=>`This is <b>${f.name.toLowerCase()}</b> — it ${f.def}.`
@@ -5507,7 +5515,7 @@ function rMatch(){
   return {
     setLine:'Set R — Fallacies (definitions)',
     prompt:`Which fallacy is this?<br><span class="argblock"><i>An argument that ${f.def}.</i></span>`,
-    instr:'Scroll the full list of fallacy names and pick the one that matches the description.',
+    instr:'All eighteen fallacy names are listed. Click one to preview its brief description, then Confirm your choice.',
     mode:'picklist', noKeyboard:true,
     options:rFallacyList(), answer:f.name,
     explain:()=>`<b>${f.name}</b> ${f.def}. Example: <i>${f.ex[0]}</i>`
@@ -8798,15 +8806,20 @@ function renderProblem(){
   } else if(p.mode==='picklist'){
     const opts=p.options||[];
     html+=`<div class="picklist" id="picklist">
-      <div class="picklist-label">All fallacies — scroll, then select</div>
-      <div class="picklist-scroll" id="pickScroll" role="listbox" aria-label="Fallacy names">`;
-    opts.forEach((name,i)=>{
+      <div class="picklist-label">All fallacies — click one, then Confirm</div>
+      <div class="picklist-grid" role="listbox" aria-label="Fallacy names">`;
+    opts.forEach((opt,i)=>{
+      const name=typeof opt==='string'?opt:opt.name;
       html+=`<button type="button" class="picklist-item" role="option" data-i="${i}" onclick="selectPick(${i})">${name}</button>`;
     });
     html+=`</div>
+      <details class="picklist-blurb" id="pickBlurb">
+        <summary><span class="chev">▶</span> Brief description</summary>
+        <div class="picklist-blurb-body" id="pickBlurbBody"><span class="muted">Click a fallacy name to see its description here.</span></div>
+      </details>
       <div class="picklist-actions">
         <button type="button" class="primary" id="pickConfirm" onclick="answerPick()" disabled>Confirm selection</button>
-        <span class="muted" id="pickHint">Scroll the list · click a name · Confirm</span>
+        <span class="muted" id="pickHint">Click a name · read the description · Confirm</span>
       </div>
     </div>`;
   } else if(p.mode==='custom'){
@@ -8892,21 +8905,26 @@ window.answerMC=function(i){
     if(t>=2) disableChoices(true);
   }
 };
-/* ---- Set R picklist (full fallacy roster in a fixed scroll frame) ---- */
+/* ---- Set R picklist (all fallacies in two columns + collapsible description) ---- */
+function pickOptName(opt){ return typeof opt==='string'?opt:opt.name; }
+function pickOptDef(opt){ return typeof opt==='string'?'':(opt.def||''); }
 window.selectPick=function(i){
   const p=session.current; if(!p||p.mode!=='picklist'||p.pickLocked) return;
   const items=[...document.querySelectorAll('.picklist-item')];
   if(!items[i]||items[i].disabled) return;
   session.pickSel=i;
   items.forEach((b,j)=>b.classList.toggle('sel', j===i));
-  const conf=$('pickConfirm'), hint=$('pickHint');
+  const opt=p.options[i], name=pickOptName(opt), def=pickOptDef(opt);
+  const conf=$('pickConfirm'), hint=$('pickHint'), blurb=$('pickBlurb'), body=$('pickBlurbBody');
   if(conf) conf.disabled=false;
-  if(hint) hint.textContent='Selected: '+p.options[i];
+  if(hint) hint.textContent='Selected: '+name;
+  if(blurb) blurb.open=true;
+  if(body) body.innerHTML=def?`<b>${name}</b> — ${def}.`:`<b>${name}</b>`;
 };
 window.answerPick=function(){
   const p=session.current; if(!p||p.mode!=='picklist'||p.pickLocked) return;
   const i=session.pickSel; if(i==null||i<0) return;
-  const name=p.options[i];
+  const name=pickOptName(p.options[i]);
   const items=[...document.querySelectorAll('.picklist-item')];
   session.lastAnswer=String(name).slice(0,80);
   const ok=name===p.answer;
@@ -8917,11 +8935,10 @@ window.answerPick=function(){
   } else {
     items[i].classList.add('bad');
     items[i].classList.remove('sel');
-    const why=(p.diagnose&&p.diagnose(name))||'Not that one — scroll the list and try another name.';
+    const why=(p.diagnose&&p.diagnose(name))||'Not that one — pick another name from the list.';
     const t=penalizeWrong(why, p.explain?p.explain():'');
     if(t>=2) disablePicklist(true);
     else {
-      // keep the list open for another try; clear selection
       session.pickSel=undefined;
       const conf=$('pickConfirm'), hint=$('pickHint');
       if(conf) conf.disabled=true;
@@ -8935,7 +8952,7 @@ function disablePicklist(revealCorrect){
   const conf=$('pickConfirm'); if(conf) conf.disabled=true;
   document.querySelectorAll('.picklist-item').forEach((b,i)=>{
     b.onclick=null; b.disabled=true; b.classList.remove('sel');
-    if(revealCorrect && p.options[i]===p.answer) b.classList.add('good');
+    if(revealCorrect && pickOptName(p.options[i])===p.answer) b.classList.add('good');
   });
 }
 /* ---- type ---- */
@@ -8949,7 +8966,7 @@ window.answerType=function(){
 function hintFor(p){
   if(p.mode==='tf') return 'reconsider the test described below.';
   if(p.mode==='mc') return 'eliminate the option you tried and look again.';
-  if(p.mode==='picklist') return 'scroll the full list — every fallacy name is there.';
+  if(p.mode==='picklist') return 'every fallacy name is in the two columns — pick again.';
   return 'check your symbols, parentheses, and letter case.';
 }
 function disableChoices(revealCorrect){
@@ -9133,7 +9150,7 @@ const INFO={
   O:`Belief logic generates consistency norms (an implicit "be consistent" premise is built into the rules). Belief worlds ("u", "uu", …) contain everything you're committed to accepting. <b>B−</b>: from "${SYM.not}u:A" derive "u ${SYM.therefore} ${SYM.not}A" using a NEW string of u's (star the original). <b>B+</b>: from "u:A" derive "u ${SYM.therefore} A" using any string of u's (don't star). Use B− first, B+ later. Note what fails: not-believing isn't believing-not, and believing doesn't make true.`,
   P:`Probability = favorable ÷ total equally likely cases (52 cards, 36 dice combinations, 2ⁿ coin patterns). Necessary truth = 100%; self-contradiction = 0%; P(not A)=1−P(A). Independent: P(A and B)=P(A)·P(B); dependent: multiply by P(B after A). Mutually exclusive: P(A or B)=P(A)+P(B); overlapping: subtract the overlap. Conditional: P(B|A)=P(A and B)/P(A).<br><br><b>Odds</b>: against = unfavorable/favorable ("12 to 1 against"); in favor = favorable/unfavorable; x-to-y in favor → P = x/(x+y). <b>Expected gain</b> = P(win)·payoff − P(lose)·stake; compare options by expected cost. <b>Induction</b>: statistical syllogism (N% of A's are B's; X is an A; that's all we know ∴ N% probable), sample projection, analogy — plus Mill's methods (agreement, difference, disagreement, variation) for causes.`,
   Q:`Gensler's five rules for a good lexical definition. A definition should be neither <b>too broad</b> (fits non-instances) nor <b>too narrow</b> (leaves out real ones) — or <b>both</b> at once; should avoid being <b>circular</b> (defines the term with itself) or using <b>poorly understood terms</b>; should <b>match the term in vagueness</b> (not be overly precise); should <b>match its emotional tone</b> (no added positive/negative slant); and should include only <b>essential properties</b> (no accidental features). Use the interchange test: swap the term and its definition in sentences and see if the meaning stays the same.`,
-  R:`Eighteen informal fallacies in four groups. <b>Defects of a good argument:</b> circular (question begging) · ambiguous · appeal to emotion · beside the point · straw man. <b>Premise-conclusion patterns:</b> appeal to the crowd · appeal to ignorance · part-whole · genetic · opposition · post hoc ergo propter hoc. <b>Correct-or-faulty forms</b> (fine when their conditions are met, fallacious otherwise): appeal to authority · ad hominem · pro-con. <b>Others:</b> appeal to force · black and white thinking · complex question · false stereotype.<br><br>As in Gensler’s LogiCola, <b>every problem shows the full list of names</b>. Scroll the fixed list (about five names visible at a time), click one, then Confirm. The problem text stays above the list while you scroll.`,
+  R:`Eighteen informal fallacies in four groups. <b>Defects of a good argument:</b> circular (question begging) · ambiguous · appeal to emotion · beside the point · straw man. <b>Premise-conclusion patterns:</b> appeal to the crowd · appeal to ignorance · part-whole · genetic · opposition · post hoc ergo propter hoc. <b>Correct-or-faulty forms</b> (fine when their conditions are met, fallacious otherwise): appeal to authority · ad hominem · pro-con. <b>Others:</b> appeal to force · black and white thinking · complex question · false stereotype.<br><br>As in Gensler’s LogiCola, <b>every problem shows the full list of names</b> in two columns. Click a name to open its brief description, then Confirm.`
   S:`<b>∈</b> membership ("is one of") vs <b>⊆</b> subset ("every member of … is a member of …") — never confuse them: 1 ∈ {1,2} but {1} ⊆ {1,2}. <b>∅</b> is the empty set; ∅ ⊆ A for every A, and {∅} ≠ ∅. A set is fixed by its members alone (<b>extensionality</b>): order and repetition don't matter. Operations: A ∪ B (in either), A ∩ B (in both), A − B (in A but not B), A′ (in the universe U but not A). <b>P(A)</b> = the set of all subsets of A; |P(A)| = 2<sup>|A|</sup>. Ordered pairs (a,b) care about order; A × B = all pairs with first member from A, second from B. When typing a set, use braces and commas — {1, 3} — and ∅ or {} for the empty set; member order doesn't matter.`,
   T:`<b>Syntax</b> is about shape (wff, proof, main connective); <b>semantics</b> is about truth under interpretations (tautology, validity, ${'⊨'}). The <b>object language</b> is the language studied; the <b>metalanguage</b> is the language we study it in — "wff," "valid," and "⊢" are metalanguage. To talk about an expression, quote it: Boston is a city, but 'Boston' has six letters. The grammar used here: (1) any capital letter is a wff; (2) if P is a wff so is its negation; (3) if P and Q are wffs so is (P # Q) for each binary connective, parentheses included; nothing else is a wff. In the <b>regimented English</b> activity, quantifier phrases are pulled to the front in scope order, each as "every/some … is such that …," and pronouns act as bound variables.`,
 };

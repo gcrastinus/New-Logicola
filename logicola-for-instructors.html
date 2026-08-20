@@ -8370,30 +8370,31 @@ function fileMenu(){
     `<h3 style="margin:18px 0 2px">${title} <span class="muted" style="font-weight:400;font-size:13px">· ${ch}</span></h3>
      <div class="grid">${ids.filter(id=>SETS[id]).map(btn).join('')}</div>`;
   const groups   = SET_GROUPS.filter(g=>g[0]!=='Sets and Metatheory').map(gHtml).join('');
-  // S & T: same set buttons, but a clear break from the chapter list (not a book supplement)
   const smIds = (SET_GROUPS.find(g=>g[0]==='Sets and Metatheory')||[,,[]])[2]||[];
-  const smGroups = smIds.some(id=>SETS[id]) ? `
-    <div style="margin-top:22px;padding:14px 14px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(11,36,56,0.55)">
-      <h3 style="margin:0 0 4px">Further topics <span class="muted" style="font-weight:400;font-size:13px">· Sets S &amp; T · not in Gensler</span></h3>
-      <p class="muted" style="font-size:12.5px;margin:0 0 10px;line-height:1.45">Optional extras beyond the chapter exercises — set theory background and formal languages / metatheory. Same scoring as the other sets.</p>
-      <div class="grid">${smIds.filter(id=>SETS[id]).map(btn).join('')}</div>
-    </div>` : '';
-  // Proof builders: separate Tools block (still level-9 gated), above Explore
-  const toolsBtn = `<h3 style="margin:22px 0 2px">Tools <span class="muted" style="font-weight:400;font-size:13px">· proof builders · optional</span></h3>
-    <p class="muted" style="font-size:12.5px;margin:0 0 8px;line-height:1.45">Optional workspaces for writing your own proofs (ungraded). Unlock each by mastering the matching set at level 9.</p>
-    <div class="grid">${toolBtn}${qtoolBtn}${ktoolBtn}</div>`;
   const dUnlocked=true;
-  const deviantBtn = `<h3 style="margin:22px 0 2px">Explore · Non-Classical Logic</h3><div class="grid">`+ (dUnlocked
+  const deviantOne = dUnlocked
     ? `<button type="button" class="setbtn tool" style="border-color:#a78bfa;background:linear-gradient(160deg,rgba(167,139,250,0.16),rgba(167,139,250,0.05))" onclick="closeModal();launchDeviant()"><span class="id" style="color:#a78bfa">◆ Tool</span><span class="nm">Non-Classical Workbench</span><span class="ch">Free · intuitionistic · medieval term logic — validity checker &amp; proof builder · ungraded</span></button>`
-    : `<button type="button" class="setbtn tool" style="border-color:#a78bfa;opacity:.45;cursor:not-allowed" title="Master Set I at level 9 to unlock" onclick="event.preventDefault()"><span class="id" style="color:#a78bfa">🔒 Tool</span><span class="nm">Non-Classical Workbench</span><span class="ch">Unlocks when you master Set I at level 9</span></button>`)
-    + `</div>`;
+    : `<button type="button" class="setbtn tool" style="border-color:#a78bfa;opacity:.45;cursor:not-allowed" title="Master Set I at level 9 to unlock" onclick="event.preventDefault()"><span class="id" style="color:#a78bfa">🔒 Tool</span><span class="nm">Non-Classical Workbench</span><span class="ch">Unlocks when you master Set I at level 9</span></button>`;
+  // Everything outside the textbook chapter sets — one shared panel
+  const extrasPanel = `
+    <div style="margin-top:22px;padding:14px 14px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(11,36,56,0.55)">
+      <h3 style="margin:0 0 4px">Beyond the textbook <span class="muted" style="font-weight:400;font-size:13px">· optional · not chapter exercises</span></h3>
+      <p class="muted" style="font-size:12.5px;margin:0 0 14px;line-height:1.45">Proof builders, non-classical exploration, and background sets (S &amp; T). These are not part of Gensler’s chapter exercise sequence.</p>
+      <h3 style="margin:0 0 6px;font-size:15px">Tools <span class="muted" style="font-weight:400;font-size:12.5px">· proof builders</span></h3>
+      <p class="muted" style="font-size:12.5px;margin:0 0 8px;line-height:1.45">Ungraded workspaces for writing your own proofs. Unlock each by mastering the matching set at level 9.</p>
+      <div class="grid">${toolBtn}${qtoolBtn}${ktoolBtn}</div>
+      <h3 style="margin:16px 0 6px;font-size:15px">Explore · Non-Classical Logic</h3>
+      <div class="grid">${deviantOne}</div>
+      ${smIds.some(id=>SETS[id]) ? `
+      <h3 style="margin:16px 0 6px;font-size:15px">Further topics <span class="muted" style="font-weight:400;font-size:12.5px">· Sets S &amp; T · not in Gensler</span></h3>
+      <p class="muted" style="font-size:12.5px;margin:0 0 8px;line-height:1.45">Set theory background and formal languages / metatheory. Same scoring as the chapter sets.</p>
+      <div class="grid">${smIds.filter(id=>SETS[id]).map(btn).join('')}</div>` : ''}
+    </div>`;
   openModal(`<button type="button" class="close" onclick="closeModal()">×</button>
     <h2>Load Exercise Set</h2>
     <div class="rowbtns" style="margin:0 0 8px"><button type="button" class="ghost" onclick="openModal(optForm(false))">Options — name, scoring, sound &amp; technical settings</button></div>
     ${groups}
-    ${toolsBtn}
-    ${deviantBtn}
-    ${smGroups}`);
+    ${extrasPanel}`);
 }
 /* ---- unified per-set exercise menu ----
    Every set opens a menu: its activities (if any), an easier/harder choice,

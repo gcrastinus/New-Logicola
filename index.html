@@ -6092,7 +6092,7 @@ const T_LANG=[
    a:`the object language is the language under study; the metalanguage is the language in which we study it`,
    d:[{text:`the object language is about objects; the metalanguage is about ideas`,why:`Nothing to do with subject matter — it's about which language is being TALKED ABOUT and which is doing the talking.`},
       {text:`the metalanguage must be a formal language`,why:`Usually it's the opposite: the object language is formal and the metalanguage is ordinary English (plus some mathematics).`}],
-   x:`When this app states rules ABOUT wffs in English, the wff-language is the object language and English is the metalanguage.`},
+   x:`When this set of exercises states rules ABOUT wffs in English, the wff-language is the object language and English is the metalanguage.`},
   {q:`Which of these belong to the METALANGUAGE rather than the object language of propositional logic?`,
    a:`"is a wff," "is valid," "⊢" — vocabulary for talking about the formulas`,
    d:[{text:`the sentence letters A, B, C`,why:`Those are the object language's own vocabulary — the things talked about.`},
@@ -6447,7 +6447,7 @@ const T_META=[
    d:[{text:`a theorem proved by Turing`,why:`Turing proved theorems ABOUT his machines; the thesis links them to the INFORMAL idea of effective procedure, and informal notions don't figure in theorems.`},
       {text:`a mere convention of terminology`,why:`More than convention: every proposed rival analysis (recursion, λ-calculus, register machines…) provably coincides with Turing computability — striking evidence, though still not proof.`}],
    x:`It matters here because undecidability results ("NO algorithm exists") inherit their sweep from the thesis.`},
-  {q:`Gensler's propositional logic — the system practiced throughout this app — is:`,
+  {q:`Gensler's propositional logic — the system practiced throughout this course — is:`,
    a:`sound, complete, consistent, and decidable: everything provable is valid, everything valid is provable, no contradictions, and truth tables decide validity`,
    d:[{text:`sound and complete but undecidable`,why:`Undecidability starts with QUANTIFICATIONAL logic; the propositional fragment has its truth-table decision procedure.`},
       {text:`incomplete, by Gödel's theorem`,why:`Gödel's incompleteness needs arithmetic-strength THEORIES; propositional logic is far below the threshold, and is complete.`}],
@@ -6490,7 +6490,7 @@ const T_REG=[
    a:`they had no artificial symbolism — instead they regimented Latin itself, fixing word order and scope conventions until a disciplined fragment of the natural language did a formal language's work`,
    d:[{text:`they anticipated modern symbolic notation`,why:`Almost none — a handful of abbreviations aside, their technical instrument WAS regimented Latin, which is exactly Klima's point.`},
       {text:`they distrusted formal methods`,why:`The opposite: supposition theory and their scope-idioms were rigorous formal method, executed in a natural language.`}],
-   x:`Klima's reconstructions render regimented Latin with restricted variables — the approach behind this app's Medieval Term Logic workbench (unlock it via Set I). Regimentation is an old, powerful road to rigor.`},
+   x:`Klima's reconstructions render regimented Latin with restricted variables — the approach behind this course's Medieval Term Logic workbench (unlock it via Set I). Regimentation is an old, powerful road to rigor.`},
   {q:`What does REGIMENTING a fragment of English mainly buy, compared with English at large?`,
    a:`each regimented sentence has exactly one reading — scope is fixed by the order of the fronted quantifier phrases`,
    d:[{text:`shorter sentences`,why:`Usually LONGER ("every critic is such that…"). The gain is uniqueness of reading, not brevity.`},
@@ -6543,7 +6543,7 @@ const T_REG=[
    a:`"every A is such that it is B" matches ${'(x)(Ax ⊃ Bx)'}, and "some A is such that it is B" matches ${'(∃x)(Ax • Bx)'} — universal pairs with if-then, existential with and`,
    d:[{text:`both quantifiers pair with if-then`,why:`"Some A is such that it is B" as (∃x)(Ax ⊃ Bx) would be true whenever anything at all fails to be A — one of the most instructive translation errors there is.`},
       {text:`both quantifiers pair with and`,why:`(x)(Ax • Bx) says everything is BOTH A and B — far stronger than "every A is B."`}],
-   x:`Restricted quantification is arguably the more natural primitive — medieval logic (and Klima's reconstruction, and this app's MTL workbench) builds the restriction into the variable itself.`},
+   x:`Restricted quantification is arguably the more natural primitive — medieval logic (and Klima's reconstruction, and this course's MTL workbench) builds the restriction into the variable itself.`},
 ];
 const T_SCOPE=[
   {every:'critic', some:'book',    verb:'reviewed', E:'Every critic reviewed some book.',  L:['C','B','R'], pro:['he','it']},
@@ -7472,7 +7472,7 @@ function ncExplainHtml(logic){
     <details class="optsub" style="margin-top:8px">
       <summary><span class="chev">▶</span> How to use this system here</summary>
       <div class="inner" style="line-height:1.65;font-size:14px;color:var(--ink)">
-        <p style="margin:6px 0 8px"><b>Validity checker:</b> enter an argument; the app relativizes quantifiers to existence, then seeks a countermodel or proof, and contrasts the classical verdict.</p>
+        <p style="margin:6px 0 8px"><b>Validity checker:</b> enter an argument; it relativizes quantifiers to existence, then seeks a countermodel or proof, and contrasts the classical verdict.</p>
         <p style="margin:0"><b>Proof builder:</b> build a Copi-style quantificational proof where UI and EG need an existence premise ${wff('('+SYM.exists+'y)(y=c)')}. Switch modes anytime — your premises and conclusion are kept.</p>
       </div>
     </details>`;

@@ -214,6 +214,35 @@
   .die span{display:flex;align-items:center;justify-content:center}
   .die i{width:8px;height:8px;background:#222;border-radius:50%}
   .coin{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffe9a8,#d4a017);border:1px solid #a67c00;display:flex;align-items:center;justify-content:center;color:#5c4400;font-weight:800;box-shadow:0 2px 5px rgba(0,0,0,.35)}
+  /* two-dice sum table — same disclosure, borders, and type as the rest of the app.
+     Die faces stay the physical cream dice (dark pips), so they read on the dark
+     app and on a light page. color-scheme keeps the native toggle dark with the app
+     whether the system is in light or dark mode. */
+  .dicetable{margin:12px 0 2px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);
+    width:min(100%, 352px);max-width:100%;color-scheme:dark}
+  .dicetable>summary{list-style:none;cursor:pointer;padding:8px 12px;color:var(--accent);font-size:13px;font-weight:600;
+    letter-spacing:.3px;user-select:none;display:flex;align-items:center;gap:7px;line-height:1.2}
+  .dicetable>summary::-webkit-details-marker{display:none}
+  .dicetable>summary .chev{display:inline-block;transition:transform .15s;font-size:11px}
+  .dicetable[open]>summary .chev{transform:rotate(90deg)}
+  .dicetable>summary:hover{color:var(--ink)}
+  .dicetable-body{padding:0 8px 10px}
+  .dicetable-note{margin:0 2px 6px;font-size:11.5px;line-height:1.35;color:var(--muted)}
+  table.dicesums{border-collapse:collapse;width:100%;table-layout:fixed;
+    font-family:"Cambria Math","Times New Roman",Georgia,serif;font-size:14px;line-height:1;color:var(--ink);
+    font-variant-numeric:tabular-nums}
+  table.dicesums th,table.dicesums td{border:1px solid var(--line);padding:1px 0;text-align:center;vertical-align:middle;font-weight:600;height:30px}
+  table.dicesums thead th,table.dicesums tbody th{background:#0a1c2e}
+  .dicetable .die{width:20px;height:20px;border-radius:4px;padding:2px;gap:0;box-shadow:none;margin:0 auto}
+  .dicetable .die i{width:3px;height:3px}
+  @media (max-width:520px){
+    .dicetable>summary{padding:7px 10px}
+    .dicetable-body{padding:0 4px 8px}
+    table.dicesums{font-size:12.5px}
+    table.dicesums th,table.dicesums td{height:26px}
+    .dicetable .die{width:16px;height:16px;border-radius:3px;padding:1px}
+    .dicetable .die i{width:3px;height:3px}
+  }
   /* truth trees */
   .treewrap{font-family:"Cambria Math","Times New Roman",serif;font-size:15.5px;background:#0b2438;border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto;margin-top:10px}
   .tnode{text-align:center;padding:0 8px}
@@ -5084,26 +5113,26 @@ function pDice(){
     {q:`You throw one die. What is the probability of getting a number higher than 4?`,
      v:2/6, viz:dieHtml(5)+dieHtml(6), exp:`Two faces (5, 6) out of six: 2/6 = 1/3.`},
     {q:`You throw two dice. What is the probability that the total is 7?`,
-     v:diceProb((a,b)=>a+b===7), viz:dieHtml(3)+dieHtml(4),
+     v:diceProb((a,b)=>a+b===7), viz:dieHtml(3)+dieHtml(4), twoDice:true,
      exp:`6 of the 36 equally likely combinations total 7 (1-6, 2-5, 3-4, 4-3, 5-2, 6-1): 6/36 = 1/6.`},
     {q:`You throw two dice. What is the probability that the total is 12?`,
-     v:diceProb((a,b)=>a+b===12), viz:dieHtml(6)+dieHtml(6),
+     v:diceProb((a,b)=>a+b===12), viz:dieHtml(6)+dieHtml(6), twoDice:true,
      exp:`Only 6-6 works: 1/36.`},
     {q:`You throw two dice. What is the probability of doubles (both dice the same)?`,
-     v:diceProb((a,b)=>a===b), viz:dieHtml(d1)+dieHtml(d1),
+     v:diceProb((a,b)=>a===b), viz:dieHtml(d1)+dieHtml(d1), twoDice:true,
      exp:`6 doubles out of 36 combinations: 6/36 = 1/6.`},
     {q:`You throw two dice. What is the probability that the total is 10 or more?`,
-     v:diceProb((a,b)=>a+b>=10), viz:dieHtml(5)+dieHtml(6),
+     v:diceProb((a,b)=>a+b>=10), viz:dieHtml(5)+dieHtml(6), twoDice:true,
      exp:`Totals 10 (3 ways), 11 (2 ways), 12 (1 way): 6/36 = 1/6.`},
     {q:`You throw two dice. What is the probability of getting at least one six?`,
-     v:diceProb((a,b)=>a===6||b===6), viz:dieHtml(6)+dieHtml(d2),
+     v:diceProb((a,b)=>a===6||b===6), viz:dieHtml(6)+dieHtml(d2), twoDice:true,
      exp:`11 of the 36 combinations contain a six: 11/36. (Or 1 − (5/6)·(5/6).)`},
     (()=>{ const k=2+rand(4); return {
      q:`Judy rolls a ${k}. You roll one die; the higher number wins. What is the probability that you beat her?`,
      v:(6-k)/6, viz:dieHtml(k)+dieHtml(6),
      exp:`You win with any of the ${6-k} faces above ${k}: ${6-k}/6. (Tying has probability 1/6.)`}; })(),
     {q:`Judy rolls two dice totaling 7. You roll two dice; the higher total wins. What is the probability that you beat her (total 8 or more)?`,
-     v:15/36, viz:dieHtml(4)+dieHtml(3),
+     v:15/36, viz:dieHtml(4)+dieHtml(3), twoDice:true,
      exp:`15 of the 36 combinations total 8 or more: 15/36 ≈ 41.7% — the same as your chance of losing; 6/36 tie.`},
   ];
   return pFinish(pick(items),'dice');
@@ -5156,6 +5185,42 @@ function pRules(){
   }
   return pFinish(it,'rules');
 }
+/* 6×6 sums of two dice. Open unless the student collapsed it earlier this session.
+   Cells are plain sums — nothing is marked, because counting them is the exercise. */
+const DICE_TABLE_KEY='logicola.diceTable';
+function diceTableOpen(){
+  try{ return sessionStorage.getItem(DICE_TABLE_KEY)!=='closed'; }catch(e){ return true; }
+}
+function diceSumTableHtml(){
+  const open=diceTableOpen();
+  let cols='';
+  for(let c=1;c<=6;c++) cols+=`<th scope="col">${dieHtml(c)}</th>`;
+  let rows='';
+  for(let r=1;r<=6;r++){
+    let cells=`<th scope="row">${dieHtml(r)}</th>`;
+    for(let c=1;c<=6;c++) cells+=`<td>${r+c}</td>`;
+    rows+=`<tr>${cells}</tr>`;
+  }
+  return `<details class="dicetable"${open?' open':''}>
+    <summary><span class="chev">▶</span><span class="dtlab">${open?'Hide table':'Show table'}</span></summary>
+    <div class="dicetable-body">
+      <p class="dicetable-note">First die down the side, second across the top.</p>
+      <table class="dicesums" aria-label="Sums of two dice">
+        <thead><tr><th class="corner" scope="col"></th>${cols}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </details>`;
+}
+function bindDiceTable(){
+  const el=document.querySelector('details.dicetable');
+  if(!el) return;
+  const lab=el.querySelector('.dtlab');
+  el.addEventListener('toggle',()=>{
+    if(lab) lab.textContent=el.open?'Hide table':'Show table';
+    try{ sessionStorage.setItem(DICE_TABLE_KEY, el.open?'open':'closed'); }catch(e){}
+  });
+}
 function pFinish(it,kind){
   const ansStr=fmtProb(it.v);
   const D=uniqStrings([fmtProb(1-it.v), fmtProb(Math.min(1,it.v*2)), fmtProb(it.v/2), fmtProb(Math.min(1,it.v+1/6)), fmtProb(Math.abs(it.v-1/12)), '1/2','1/4','1/6']).filter(x=>x!==ansStr);
@@ -5163,6 +5228,7 @@ function pFinish(it,kind){
   return {
     setLine:`Set P — Probability (${kind})`, scratch:true,
     prompt:`${it.q}${it.viz?viz(it.viz):''}`,
+    diceTable:!!it.twoDice,
     instr:`Probability = favorable cases ÷ equally likely total cases. P(not A) = 1 − P(A); necessary truth = 100%; self-contradiction = 0%. Independent: P(A and B) = P(A)·P(B). Mutually exclusive: P(A or B) = P(A)+P(B); otherwise subtract the overlap. P(B|A) = P(A and B)/P(A).`,
     mode:'mc', noKeyboard:true,
     choices: mc(ansStr, shuffle(D)),
@@ -8797,6 +8863,7 @@ function renderProblem(){
   let html=`<div class="card">
     <div class="setline">${p.setLine}</div>
     <div class="prompt">${p.prompt}</div>`;
+  if(p.diceTable) html+=diceSumTableHtml();
   if(p.scratch) html+=scratchHtml();
   if(p.mode==='mc'||p.mode==='tf'){
     html+=`<div class="choices" id="choices">`;
@@ -8846,6 +8913,7 @@ function renderProblem(){
   if(p.mode==='custom' && p.mount){ p.mount($('customBody')); }
   const inp=$('ansInput');
   if(inp){ inp.focus(); inp.addEventListener('keydown',e=>{ if(e.key==='Enter') answerType(); }); }
+  bindDiceTable();
   window.scrollTo(0,0);
 }
 function keyboardHtml(){

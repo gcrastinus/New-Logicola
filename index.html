@@ -5044,7 +5044,10 @@ function genO(){ return makeO(); }
 
 /* ========== SET P — Probability ==========
    Gensler-form problems: drawing cards, throwing dice, flipping coins —
-   each with a little picture — plus the probability rules. */
+   cards and coins with a little picture — plus the probability rules.
+   A dice question about a kind of outcome shows the statement only;
+   a pictured throw can be read as the question itself. Two-dice
+   questions still include the 6×6 sum table. */
 function dieHtml(n){
   const pat={1:[4],2:[2,6],3:[2,4,6],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]}[n]||[4];
   return `<span class="die">${[...Array(9)].map((_,i)=>`<span>${pat.includes(i)?'<i></i>':''}</span>`).join('')}</span>`;
@@ -5104,35 +5107,35 @@ function pCards(){
   return pFinish(pick(items),'cards');
 }
 function pDice(){
-  const d1=1+rand(6), d2=1+rand(6), n=2+rand(5);
+  const n=2+rand(5);
   const items=[
     {q:`You throw one die. What is the probability of getting a ${n}?`,
-     v:1/6, viz:dieHtml(n), exp:`One face out of six: 1/6.`},
+     v:1/6, exp:`One face out of six: 1/6.`},
     {q:`You throw one die. What is the probability of getting an even number?`,
-     v:3/6, viz:dieHtml(2)+dieHtml(4)+dieHtml(6), exp:`Three even faces (2, 4, 6) out of six: 1/2.`},
+     v:3/6, exp:`Three even faces (2, 4, 6) out of six: 1/2.`},
     {q:`You throw one die. What is the probability of getting a number higher than 4?`,
-     v:2/6, viz:dieHtml(5)+dieHtml(6), exp:`Two faces (5, 6) out of six: 2/6 = 1/3.`},
+     v:2/6, exp:`Two faces (5, 6) out of six: 2/6 = 1/3.`},
     {q:`You throw two dice. What is the probability that the total is 7?`,
-     v:diceProb((a,b)=>a+b===7), viz:dieHtml(3)+dieHtml(4), twoDice:true,
+     v:diceProb((a,b)=>a+b===7), twoDice:true,
      exp:`6 of the 36 equally likely combinations total 7 (1-6, 2-5, 3-4, 4-3, 5-2, 6-1): 6/36 = 1/6.`},
     {q:`You throw two dice. What is the probability that the total is 12?`,
-     v:diceProb((a,b)=>a+b===12), viz:dieHtml(6)+dieHtml(6), twoDice:true,
+     v:diceProb((a,b)=>a+b===12), twoDice:true,
      exp:`Only 6-6 works: 1/36.`},
     {q:`You throw two dice. What is the probability of doubles (both dice the same)?`,
-     v:diceProb((a,b)=>a===b), viz:dieHtml(d1)+dieHtml(d1), twoDice:true,
+     v:diceProb((a,b)=>a===b), twoDice:true,
      exp:`6 doubles out of 36 combinations: 6/36 = 1/6.`},
     {q:`You throw two dice. What is the probability that the total is 10 or more?`,
-     v:diceProb((a,b)=>a+b>=10), viz:dieHtml(5)+dieHtml(6), twoDice:true,
+     v:diceProb((a,b)=>a+b>=10), twoDice:true,
      exp:`Totals 10 (3 ways), 11 (2 ways), 12 (1 way): 6/36 = 1/6.`},
     {q:`You throw two dice. What is the probability of getting at least one six?`,
-     v:diceProb((a,b)=>a===6||b===6), viz:dieHtml(6)+dieHtml(d2), twoDice:true,
+     v:diceProb((a,b)=>a===6||b===6), twoDice:true,
      exp:`11 of the 36 combinations contain a six: 11/36. (Or 1 − (5/6)·(5/6).)`},
     (()=>{ const k=2+rand(4); return {
      q:`Judy rolls a ${k}. You roll one die; the higher number wins. What is the probability that you beat her?`,
-     v:(6-k)/6, viz:dieHtml(k)+dieHtml(6),
+     v:(6-k)/6,
      exp:`You win with any of the ${6-k} faces above ${k}: ${6-k}/6. (Tying has probability 1/6.)`}; })(),
     {q:`Judy rolls two dice totaling 7. You roll two dice; the higher total wins. What is the probability that you beat her (total 8 or more)?`,
-     v:15/36, viz:dieHtml(4)+dieHtml(3), twoDice:true,
+     v:15/36, twoDice:true,
      exp:`15 of the 36 combinations total 8 or more: 15/36 ≈ 41.7% — the same as your chance of losing; 6/36 tie.`},
   ];
   return pFinish(pick(items),'dice');
@@ -5251,11 +5254,11 @@ function pOdds(){
      d:['3 to 10 in favor','10 to 3 against','even'],
      exp:`40 favorable vs. 12 unfavorable: 40/12 = 10 to 3 in your favor.`},
     {q:`You throw one die. What are the odds regarding rolling a six?`,
-     a:'5 to 1 against', viz:dieHtml(6),
+     a:'5 to 1 against',
      d:['1 to 5 against','5 to 1 in favor','even'],
      exp:`5 unfavorable faces vs. 1 favorable: 5 to 1 against.`},
     {q:`You throw one die. What are the odds regarding rolling a 4 or less?`,
-     a:'2 to 1 in favor', viz:dieHtml(3),
+     a:'2 to 1 in favor',
      d:['2 to 1 against','4 to 2 against','even'],
      exp:`4 favorable faces vs. 2 unfavorable: 4/2 = 2 to 1 in your favor.`},
     {q:`The odds are 3 to 2 in favor of your team winning. What is the probability that it wins?`,
@@ -5285,8 +5288,8 @@ function pGamble(){
     const setup=pick([
       {p:1/4, win:60, ev:'drawing a spade', v2:cardHtml('A','♠')+cardBack()},
       {p:1/2, win:24, ev:'drawing a red card', v2:cardHtml('Q','♥')+cardBack()},
-      {p:1/6, win:90, ev:'rolling a six', v2:dieHtml(6)},
-      {p:1/3, win:36, ev:'rolling a 5 or 6', v2:dieHtml(5)+dieHtml(6)},
+      {p:1/6, win:90, ev:'rolling a six'},
+      {p:1/3, win:36, ev:'rolling a 5 or 6'},
     ]);
     const stake=pick([6,12,18]);
     const eg=setup.win*setup.p - stake*(1-setup.p);
@@ -5295,7 +5298,7 @@ function pGamble(){
     const a=fmt$(eg);
     const D=uniqStrings([fmt$(setup.win*setup.p), fmt$(eg+stake), fmt$(-eg), fmt$(setup.win*setup.p-stake)]).filter(x=>x!==a);
     return { setLine:'Set P — Probability (gamble)', scratch:true,
-      prompt:`You bet $${stake} on ${setup.ev}: you collect $${setup.win} if it happens, and forfeit your $${stake} if not. What is the expected gain of this bet?${viz(setup.v2)}`,
+      prompt:`You bet $${stake} on ${setup.ev}: you collect $${setup.win} if it happens, and forfeit your $${stake} if not. What is the expected gain of this bet?${setup.v2?viz(setup.v2):''}`,
       instr:`Expected gain = (probability of winning · amount won) − (probability of losing · amount lost). A positive expected gain means the bet wins money in the long run.`,
       mode:'mc', noKeyboard:true,
       choices: mc(a, D),

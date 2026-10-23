@@ -78,6 +78,7 @@
   </div>
 
   <div id="results"></div>
+  <input type="file" id="canvasIn" accept=".csv,text/csv" style="display:none" onchange="canvasExport(this.files[0]);this.value=''">
 
   <div class="note">
     <b>How to read the integrity badges.</b>
@@ -359,6 +360,7 @@ function render(){
   if(!students.length){ results.innerHTML=''; return; }
   let html=`<h2>Class overview <span class="muted" style="font-size:14px;font-weight:400">· ${students.length} file${students.length>1?'s':''} · click a row for details</span></h2>
   <div class="rowbtns"><button class="mbtn" onclick="exportCsv()">Download CSV summary</button>
+  <button class="mbtn" onclick="document.getElementById('canvasIn').click()" title="Pick the gradebook CSV you exported from Canvas (Grades, then Export). LogiCola adds a column per set with each student's best level, ready for Canvas Grades, then Import.">Download Canvas gradebook CSV</button>
   <button class="mbtn" onclick="if(confirm('Clear all loaded files?')){students.length=0;render();}">Clear</button></div>
   <table class="roster"><tr>
     <th>Student</th><th>Integrity</th><th>Completed sets (best level)</th><th>Answers<br>(right / wrong)</th>
@@ -436,6 +438,71 @@ window.renderLog=function(i){
   h+='</table>';
   document.getElementById('logWrap'+i).innerHTML=
     (rows.length>MAX?`<p class="muted" style="padding:6px 10px">Showing the most recent ${MAX} of ${rows.length} events.</p>`:'')+h;
+};
+
+/* ===== Canvas gradebook export =====
+   Canvas has no API we can reach without a server, but its gradebook imports a
+   CSV. The instructor exports their Canvas gradebook, picks it here, and gets
+   it back with one column per LogiCola set (best level, out of 9). Students are
+   matched by name: LogiCola asks for a last name, Canvas lists "Last, First." */
+function parseCsv(text){
+  const rows=[]; let row=[], f='', q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===','){ row.push(f); f=''; }
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++; row.push(f); rows.push(row); row=[]; f=''; }
+    else f+=c;
+  }
+  if(f!==''||row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r=>r.some(x=>x.trim()!==''));
+}
+const normName=s=>String(s||'').toLowerCase().replace(/[^a-z]/g,'');
+function canvasMerge(text){
+  const rows=parseCsv(text.replace(/^\uFEFF/,''));
+  if(!rows.length) throw new Error('The file is empty.');
+  const head=rows[0].map(h=>h.trim());
+  const si=head.indexOf('Student');
+  if(si<0) throw new Error('This does not look like a Canvas gradebook export (no "Student" column).');
+  const keep=['Student','ID','SIS User ID','SIS Login ID','Integration ID','Section'].map(h=>head.indexOf(h)).filter(i=>i>=0);
+  const usable=students.filter(a=>a.integrity==='ok'||a.integrity==='legacy');
+  const sets=SET_IDS.filter(sid=>usable.some(a=>a.completed[sid]));
+  const used=new Set(), unmatched=[];
+  const out=[keep.map(i=>head[i]).concat(sets.map(sid=>'LogiCola Set '+sid))];
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r]; const who=(row[si]||'').trim();
+    const ident=keep.map(i=>row[i]||'');
+    if(/points possible/i.test(who) || /points possible/i.test(row.join(' '))){
+      out.push(ident.concat(sets.map(()=>'9'))); continue; }
+    if(!who) continue;
+    const last=normName(who.split(',')[0]);
+    const first=who.includes(',')?normName(who.split(',').slice(1).join(',')):'';
+    const full=normName(who), flip=first+last;
+    const sameLast=rows.slice(1).filter(x=>normName(String(x[si]||'').split(',')[0])===last).length;
+    const hit=usable.filter(a=>{ const n=normName(a.name);
+      return n && (n===full || n===flip || (sameLast===1 && n===last)); });
+    const a = hit.length===1 ? hit[0] : null;
+    if(a) used.add(a);
+    out.push(ident.concat(sets.map(sid=>a&&a.completed[sid]?String(a.completed[sid]):'')));
+  }
+  usable.forEach(a=>{ if(!used.has(a)) unmatched.push(a.name); });
+  const q=v=>/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+  return {csv:out.map(r=>r.map(q).join(',')).join('\r\n')+'\r\n', matched:used.size, unmatched, sets,
+    skipped:students.length-usable.length};
+}
+window.canvasExport=async function(file){
+  if(!file) return;
+  let res;
+  try{ res=canvasMerge(await file.text()); }
+  catch(e){ alert('Canvas export: '+e.message); return; }
+  const blob=new Blob([res.csv],{type:'text/csv'});
+  const link=document.createElement('a'); link.href=URL.createObjectURL(blob);
+  link.download='canvas-gradebook-logicola.csv'; document.body.appendChild(link); link.click(); link.remove();
+  let msg=`Canvas gradebook CSV downloaded: ${res.matched} student${res.matched===1?'':'s'} matched, ${res.sets.length} set column${res.sets.length===1?'':'s'} added. In Canvas, open Grades, then Import, and choose this file.`;
+  if(res.unmatched.length) msg+=`\n\nNot matched (check the name each student entered in LogiCola): ${res.unmatched.join(', ')}.`;
+  if(res.skipped) msg+=`\n\n${res.skipped} file${res.skipped===1?' was':'s were'} left out because the signature check failed or the file could not be read.`;
+  alert(msg);
 };
 
 window.exportCsv=function(){

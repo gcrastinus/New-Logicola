@@ -268,12 +268,16 @@
 
     <section class="q">
       <h2>How many questions?</h2>
-      <p class="hint">Drawn evenly from the exercises you ticked, then shuffled into a random order.
-      About 7–10 fits a five-minute quiz.</p>
+      <p class="hint">Drawn evenly from the exercises you ticked. Questions are grouped by exercise, in the order the exercises appear above; choose "Shuffle" to mix them instead.
+      About 7 to 10 questions fit a five-minute quiz.</p>
       <div class="barrow">
         <input type="range" id="countRange" min="1" max="100" value="8">
         <input type="number" id="countBox" min="1" max="100" value="8">
         <span class="muted" style="font-size:13px">questions</span>
+      </div>
+      <div class="toggle-row" id="orderRow" style="margin-top:12px">
+        <button type="button" class="toggle on" data-order="group">Group by exercise</button>
+        <button type="button" class="toggle" data-order="shuffle">Shuffle</button>
       </div>
     </section>
 
@@ -656,7 +660,12 @@ function refreshCounts(){
 /* ============================================================================
    4 · SIMPLE CONTROLS
    ========================================================================== */
-let COVER = true, SPACE = 2;
+let COVER = true, SPACE = 2, SHUFFLE = false;
+$('orderRow').onclick = e => {
+  if(!e.target.dataset.order) return;
+  SHUFFLE = e.target.dataset.order === 'shuffle';
+  [...e.currentTarget.children].forEach(b => b.classList.toggle('on', b === e.target));
+};
 $('countRange').oninput = e => $('countBox').value = e.target.value;
 $('countBox').oninput = e => {
   let n = Math.max(1, Math.min(100, parseInt(e.target.value || '1', 10)));
@@ -847,9 +856,12 @@ function drawQuestions(chosen, want){
     }
     if(!q){ try{ q = generateOne(v); }catch(e){ continue; } }
     seen.add(q.fingerprint);
-    qs.push(q);
+    qs.push({q, k: chosen.indexOf(v)});
   }
-  return shuffle(qs);
+  // default: group by exercise, in the order the exercises are listed;
+  // the "Shuffle" toggle mixes them instead
+  if(SHUFFLE) return shuffle(qs.map(x => x.q));
+  return qs.map((x, i) => ({x, i})).sort((a, b) => a.x.k - b.x.k || a.i - b.i).map(o => o.x.q);
 }
 
 /* ============================================================================
@@ -3440,6 +3452,41 @@ function proofPlayer(cfg){
     /* training wheels fade as the score builds (as in Gensler's LogiCola):
        full hints below 40 points, highlighted lines only from 40–69, none at 70+ */
     const twStage=()=> !train ? 0 : session.points<40 ? 2 : session.points<70 ? 1 : 0;
+    /* OUT-OF-ORDER STEPS: within a run of plain derived lines, any later step
+       whose cited lines are already on the page is a valid move right now.
+       Accepting it moves that step up and renumbers the justifications. */
+    const autoJust = state.autoJust!==false;
+    const NEW_THING=/drop existential|drop diamond/;
+    const NEEDS_OLD=/drop universal|drop box|equals substitute|self-identity/;
+    function eligibleSteps(){
+      const out=[idx]; const cur=S.steps[idx];
+      if(!cur||cur.kind!=='derive') return out;
+      let end=idx; while(end<S.steps.length&&S.steps[end].kind==='derive') end++;
+      for(let j=idx+1;j<end;j++){
+        const s2=S.steps[j];
+        const cited=((s2.just||'').match(/\d+/g)||[]).map(Number);
+        if(cited.some(n=>n>lineN)) continue;
+        const skipped=S.steps.slice(idx,j);
+        if(NEEDS_OLD.test(s2.just||'') && skipped.some(x=>NEW_THING.test(x.just||''))) continue;
+        if(skipped.some(x=>x.typed===s2.typed&&(x.world||'')===(s2.world||''))) continue;
+        out.push(j);
+      }
+      return out;
+    }
+    function promote(j){
+      if(j===idx) return;
+      const base=lineN+1, map={};
+      map[base+(j-idx)]=base;
+      for(let k=idx;k<j;k++) map[base+(k-idx)]=base+(k-idx)+1;
+      for(let k=idx;k<S.steps.length;k++){ const x=S.steps[k]; if(x.just) x.just=x.just.replace(/\d+/g,d=>map[d]!==undefined?String(map[d]):d); }
+      const moved=S.steps.splice(j,1)[0]; S.steps.splice(idx,0,moved);
+    }
+    /* typed justifications (Options: proof justifications typed by student) */
+    const needJust=(st)=> !autoJust && (st.kind==='derive'||st.kind==='raa') && /\d/.test(st.just||'');
+    const numSet=(t)=>[...new Set((String(t).match(/\d+/g)||[]).map(Number))].sort((a,b)=>a-b).join(',');
+    const justOk=(typed,st)=> numSet(typed)!=='' && numSet(typed)===numSet(st.just);
+    let jtries=0;
+    const justHtml=(st)=> needJust(st) ? `<div class="answerbox" style="margin-top:8px"><input class="ans" id="jInput" autocomplete="off" spellcheck="false" placeholder='justification, e.g. "from 1 and 2"'></div>` : '';
     const draw=()=>{
       const done=idx>=S.steps.length;
       twSrc = (twStage()>0 && !done) ? twInfo(S.steps[idx]).lines : new Set();
@@ -3537,10 +3584,23 @@ function proofPlayer(cfg){
       if(session.points>=100) completeSet();
     };
     const advance=()=>{
-      applyStep(S.steps[idx]); idx++; tries=0; draw();
+      applyStep(S.steps[idx]); idx++; tries=0; jtries=0; draw();
       if(idx>=S.steps.length) finish();
     };
     const right=()=>{
+      const st0=S.steps[idx];
+      if(needJust(st0)){
+        const ji=root.querySelector('#jInput');
+        if(!justOk(ji?ji.value:'',st0)){
+          tlog('w'); jtries++;
+          if(state.level>0) session.points=Math.max(0,session.points-pointsForWrong());
+          beep('bad'); updateScoreBar();
+          const fb=$('fb'); fb.className='feedback no show';
+          if(jtries===1){ fb.innerHTML=`❌ <b>That line is right, but the justification isn't.</b>${state.level>0?` (−${pointsForWrong()})`:''} Cite the earlier line numbers it comes from, e.g. "from 1 and 2." For RAA, cite the assumption and the two contradicting lines.`; if(!(cfg.forceType||state.type)) buildControls(); else if(ji) ji.focus(); }
+          else { fb.innerHTML=`❌ The justification is: <b>${st0.just}</b> (added for you, no further penalty).`; advance(); }
+          return;
+        }
+      }
       tlog('c');
       session.points+=3; beep('good'); updateScoreBar();
       const fb=$('fb'); fb.className='feedback ok show'; fb.innerHTML=`✅ <b>${pick(['Right!','Good!','Yes!','Correct!'])}</b> +3`;
@@ -3585,11 +3645,10 @@ function proofPlayer(cfg){
         ctl.innerHTML=`${twHtml}<div class="typewrap"><div class="answerbox">
           <input class="ans" id="ansInput" autocomplete="off" autocapitalize="off" spellcheck="false"
             placeholder='${st.kind==='refute'?'type REFUTE':(idx===0?'asm: …':'next line (or ASM: … / REFUTE)')}'>
-          <button class="primary" id="prfGo">Enter</button></div>${state.keyboard?keyboardHtml():''}</div>
+          <button class="primary" id="prfGo">Enter</button></div>${justHtml(st)}${state.keyboard?keyboardHtml():''}</div>
           <div class="rowbtns"><button class="hintbtn" id="prfGet">Get answer (−${Math.max(1,state.level)})</button></div>`;
         const inp=ctl.querySelector('#ansInput'); inp.focus();
-        const submit=()=>{
-          const v=inp.value.trim(); if(!v) return;
+        const matchOne=(st,v)=>{
           let ok=false;
           if(st.kind==='refute') ok=/^refute$/i.test(v);
           else{
@@ -3602,19 +3661,30 @@ function proofPlayer(cfg){
             const want=(st.world||'');
             ok = prefOk && worldTyped===want.toUpperCase().replace(/[^A-Z]/g,'') && canonWff(wffTyped)===canonWff(stepTyped(st));
           }
-          if(ok) right(); else wrong(stepAnswerText(st));
+          return ok;
+        };
+        const submit=()=>{
+          const v=inp.value.trim(); if(!v) return;
+          const j=eligibleSteps().find(k=>matchOne(S.steps[k],v));
+          if(j!==undefined){ promote(j); right(); }
+          else wrong(stepAnswerText(st));
         };
         ctl.querySelector('#prfGo').onclick=submit;
         inp.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); });
+        const jIn=ctl.querySelector('#jInput'); if(jIn) jIn.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); });
         ctl.querySelector('#prfGet').onclick=()=>{ tlog('h'); if(state.level>0){ session.points=Math.max(0,session.points-Math.max(1,state.level)); updateScoreBar(); } const fb=$('fb'); fb.className='feedback info show'; fb.innerHTML=`💡 Next line: <b class="wff">${stepAnswerText(st)}</b>`; advance(); };
       } else {
         const correct=stepAnswerText(st);
-        const opts=shuffle([{t:correct,ok:true}].concat(shuffle(distractorsFor(st)).slice(0,3).map(t=>({t,ok:false}))));
+        const elig=eligibleSteps();
+        const okTexts=elig.map(k=>stepAnswerText(S.steps[k]));
+        const extra=elig.length>1 && Math.random()<0.5 ? [elig[1+Math.floor(Math.random()*(elig.length-1))]] : [];
+        const okOpts=[{t:correct,ok:true,j:idx}].concat(extra.map(k=>({t:stepAnswerText(S.steps[k]),ok:true,j:k})));
+        const opts=shuffle(okOpts.concat(shuffle(distractorsFor(st).filter(t=>!okTexts.includes(t))).slice(0,4-okOpts.length).map(t=>({t,ok:false}))));
         ctl.innerHTML=`${twHtml}<div class="instr" style="margin-top:8px">What's next${state.name?', '+esc(state.name):''}?</div>
-          <div class="choices">${opts.map((o,i)=>`<button class="choice" data-ok="${o.ok?1:0}"><span class="num">${i+1}</span><span class="txt">${o.t}</span></button>`).join('')}</div>
+          ${justHtml(st)}<div class="choices">${opts.map((o,i)=>`<button class="choice" data-ok="${o.ok?1:0}" data-j="${o.ok?o.j:''}"><span class="num">${i+1}</span><span class="txt">${o.t}</span></button>`).join('')}</div>
           <div class="rowbtns"><button class="hintbtn" id="prfGet">Get answer (−${Math.max(1,state.level)})</button></div>`;
         ctl.querySelectorAll('.choice').forEach(b=>b.onclick=()=>{
-          if(b.dataset.ok==='1'){ b.classList.add('good'); right(); }
+          if(b.dataset.ok==='1'){ b.classList.add('good'); promote(+b.dataset.j); right(); }
           else{ b.classList.add('bad'); wrong(correct); }
         });
         ctl.querySelector('#prfGet').onclick=()=>{ tlog('h'); if(state.level>0){ session.points=Math.max(0,session.points-Math.max(1,state.level)); updateScoreBar(); } advance(); };
@@ -7693,7 +7763,7 @@ const STATE_DEFAULTS={ bMode:'sym', cMode:'easy', dMode:'eval', eMode:'sym', fMo
   hMode:'easy', iMode:'easier', jMode:'basic', kMode:'both', kLevel:'easier', lMode:'imp', mMode:'imp', nMode:'belief', pMode:'cards', rMode:'spot',
   sMode:'basics', tMode:'lang',
   bImport:'modern', modalSystem:'S5', notation:'gensler', univ:'paren', treeClose:'manual', treeDN:false,
-  gStars:'auto', gTrain:false, iKind:'both', hHints:true };
+  gStars:'auto', gTrain:false, iKind:'both', hHints:true, autoJust:true };
 for(const k in STATE_DEFAULTS) if(state[k]===undefined) state[k]=STATE_DEFAULTS[k];
 // "mixed" settings were removed — migrate any stored ones to the set's default
 // (but gLevel and iMode legitimately support 'mixed' now, so leave those alone)
@@ -7902,6 +7972,8 @@ function optForm(first){
     <div class="inner">
     <div class="field"><label>Onscreen keyboard (for touch / typing symbols)</label>
       <select id="opKb"><option value="1" ${state.keyboard?'selected':''}>On</option><option value="0" ${!state.keyboard?'selected':''}>Off</option></select></div>
+    <div class="field"><label>Proof justifications <span class="info-ic" tabindex="0">i<span class="tip">In the proof sets (G, I, K, M, O), LogiCola normally fills in each line's justification, such as "{from 1 and 2}." Choose <b>I type them</b> to cite the line numbers yourself, as on a written test. Any order is fine: "from 2 and 1" counts.</span></span></label>
+      <select id="opJust"><option value="1" ${state.autoJust!==false?'selected':''}>Filled in automatically</option><option value="0" ${state.autoJust===false?'selected':''}>I type them</option></select></div>
     <div class="field"><label>Set B validity model <span class="info-ic" tabindex="0">i<span class="tip"><b>Which square of opposition?</b><br><b>Modern</b>: universal statements ("all A is B," "no A is B") do <em>not</em> imply the matching "some" statement — empty categories are allowed. <b>Traditional</b>: assumes every category is non-empty (existential import), so "all A is B" implies "some A is B," and extra syllogisms (the strengthened moods) count as valid. Your instructor may tell you which to use.</span></span></label>
       <select id="opImport"><option value="modern" ${state.bImport!=='traditional'?'selected':''}>Modern (no existential import)</option><option value="traditional" ${state.bImport==='traditional'?'selected':''}>Traditional (existential import)</option></select></div>
     <div class="field"><label>Logic symbols <span class="info-ic" tabindex="0">i<span class="tip">Which symbols to use for the connectives. <b>Gensler</b> is the book's default (∼ not, • and, ∨ or, ⊃ if-then, ≡ iff). Other options use &amp; for "and" and → for "if-then." You can always type any of these; answers are graded regardless of which symbols you use.</span></span></label>
@@ -7920,6 +7992,7 @@ window.saveOpts=function(go){
   state.level=parseInt($('opLevel').value,10);
   state.sound=$('opSound').value==='1';
   state.keyboard=$('opKb').value==='1';
+  state.autoJust=$('opJust').value!=='0';
   state.bImport=$('opImport').value==='traditional'?'traditional':'modern';
   state.notation=NOTATIONS[$('opNotation').value]?$('opNotation').value:'gensler';
   state.univ=$('opUniv').value==='forall'?'forall':'paren';

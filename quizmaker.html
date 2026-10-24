@@ -279,6 +279,11 @@
         <button type="button" class="toggle on" data-order="group">Group by exercise</button>
         <button type="button" class="toggle" data-order="shuffle">Shuffle</button>
       </div>
+      <p class="hint" style="margin-top:12px">Answer choices in multiple-choice questions: mixed up, or listed in a fixed order (alphabetical, with "true" before "false").</p>
+      <div class="toggle-row" id="ansOrderRow">
+        <button type="button" class="toggle on" data-ans="shuffle">Shuffle answers</button>
+        <button type="button" class="toggle" data-ans="keep">Keep original order</button>
+      </div>
     </section>
 
     <section class="q">
@@ -660,7 +665,14 @@ function refreshCounts(){
 /* ============================================================================
    4 · SIMPLE CONTROLS
    ========================================================================== */
-let COVER = true, SPACE = 2, SHUFFLE = false;
+let COVER = true, SPACE = 2, SHUFFLE = false, SHUFFLE_ANS = true;
+$('ansOrderRow').onclick = e => {
+  if(!e.target.dataset.ans) return;
+  SHUFFLE_ANS = e.target.dataset.ans === 'shuffle';
+  [...e.currentTarget.children].forEach(b => b.classList.toggle('on', b === e.target));
+};
+// fixed answer order: "true" before "false", otherwise alphabetical (numbers in numeric order)
+function choiceKey(c){ const t = stripTags(c.text).trim(); return /^true$/i.test(t) ? '\u0000' : /^false$/i.test(t) ? '\u0001' : t; }
 $('orderRow').onclick = e => {
   if(!e.target.dataset.order) return;
   SHUFFLE = e.target.dataset.order === 'shuffle';
@@ -729,6 +741,7 @@ function generateOne(v){
   if(p.mode === 'mc' || p.mode === 'tf'){
     q.kind = 'mc';
     q.choices = (p.choices || []).map(c => ({ text: c.text, correct: !!c.correct }));
+    if(!SHUFFLE_ANS) q.choices.sort((a, b) => choiceKey(a).localeCompare(choiceKey(b), 'en', {numeric: true, sensitivity: 'base'}));
     const i = q.choices.findIndex(c => c.correct);
     q.answer = i >= 0 ? `(${String.fromCharCode(97 + i)}) ${stripTags(q.choices[i].text)}` : '';
   } else if(p.mode === 'custom'){

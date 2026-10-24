@@ -2667,7 +2667,9 @@ function proofPlayer(cfg){
             const worldTyped=wm?wm[1].toUpperCase():'';
             const wffTyped=wm?wm[2]:body;
             const want=(st.world||'');
-            ok = prefOk && worldTyped===want.toUpperCase().replace(/[^A-Z]/g,'') && canonWff(wffTyped)===canonWff(stepTyped(st));
+            const wantW=want.toUpperCase().replace(/[^A-Z]/g,''), wantF=canonWff(stepTyped(st));
+            // "u:A" may be a world prefix or belief notation, so try both readings
+            ok = prefOk && ((worldTyped===wantW && canonWff(wffTyped)===wantF) || (wantW==='' && canonWff(body)===wantF));
           }
           return ok;
         };

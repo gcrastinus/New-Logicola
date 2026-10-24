@@ -6857,56 +6857,10 @@ function hmac256(key,msg){
   for(let i=0;i<64;i++){ const c=k.charCodeAt(i); ip+=String.fromCharCode(c^0x36); op+=String.fromCharCode(c^0x5c); }
   return sha256hex(op+hexToBin(sha256hex(ip+utf8bin(msg))));
 }
-/* one random id per installation; travels with imports so a copied file is detectable */
-if(!state.installId){ state.installId=Math.random().toString(36).slice(2,10)+Date.now().toString(36); save(); }
-if(!Array.isArray(state.log)) state.log=[];
-/* event kinds: S start set · p problem shown · c correct · w wrong · r show-answer ·
-   s skip · h hint/get-answer · q quit proof · F set completed · I import · R reset */
-function chainHashFor(e,prevH){
-  // the m (activity) slot is included only when present, so files exported
-  // before activities were logged still verify unchanged
-  return sha256u(prevH+'|'+e.t+'|'+e.k+'|'+e.s+'|'+e.l+'|'+(e.p||'')+'|'+(e.a||'')+'|'+(e.lv===undefined?'':e.lv)+'|'+(e.n===undefined?'':e.n)+(e.m!==undefined?'|m:'+e.m:'')+'|'+LGC_SALT).slice(0,12);
-}
-/* which activity (and level, where it matters) is being worked, per set */
-function tlogAct(){
-  switch(session.set){
-    case 'A': return state.harder?'harder':'easier';
-    case 'B': return (state.bMode||'sym')+'/'+(state.bImport==='traditional'?'traditional':'modern');
-    case 'C': return state.cMode||'easy';
-    case 'D': return (state.dMode||'eval')+'/'+(state.harder?'harder':'easier');
-    case 'E': return state.eMode||'sym';
-    case 'F': return (state.fMode||'s')+'/'+(state.harder?'harder':'easier');
-    case 'G': return (state.gMode||'both')+'/'+(state.gLevel||'easier');
-    case 'H': return (state.hMode||'easy')+(state.hHints===false?'/nohints':'');
-    case 'I': return (state.iKind||'both')+'/'+(state.iMode||'easier');
-    case 'J': return state.jMode||'basic';
-    case 'K': { const km=state.kMode==='proof'?'both':(state.kMode||'both');
-      if(km==='galactic') return 'galactic/'+(state.modalSystem||'S5');
-      if(km==='quant') return 'quant';
-      return km+'/'+(state.kLevel||'easier'); }
-    case 'L': return state.lMode||'imp';
-    case 'M': return state.mMode||'imp';
-    case 'N': return state.nMode||'belief';
-    case 'O': return 'proof';
-    case 'P': return state.pMode||'cards';
-    case 'R': return state.rMode||'spot';
-    case 'S': return state.sMode||'basics';
-    case 'T': return state.tMode||'lang';
-    default: return undefined;
-  }
-}
-function tlog(k,extra){
-  try{
-    const e={t:Date.now(),k,s:session.set||'',l:state.level};
-    if(extra) for(const key in extra){ if(extra[key]!==undefined&&extra[key]!==''&&extra[key]!==null) e[key]=extra[key]; }
-    const act=session.set?tlogAct():undefined;
-    if(act!==undefined) e.m=String(act).slice(0,24);
-    e.h=chainHashFor(e, state.log.length?state.log[state.log.length-1].h:'lgc0');
-    state.log.push(e);
-    if(state.log.length>10000){ state.log.splice(0,state.log.length-10000); state.logTrim=true; }
-    save();
-  }catch(err){}
-}
+/* Scores keep only the name, best level per set, and which sets are finished.
+   Older versions also kept a practice log and an install id; clear them. */
+if('log' in state || 'logTrim' in state || 'installId' in state){ delete state.log; delete state.logTrim; delete state.installId; save(); }
+function tlog(){}   /* the practice log was removed; calls are kept as no-ops */
 function plainText(html){ const d=document.createElement('div'); d.innerHTML=html||''; return (d.textContent||'').replace(/\s+/g,' ').trim().slice(0,140); }
 
 /* ============================================================================
@@ -9157,13 +9111,13 @@ function scoresView(){
       <button class="ghost" onclick="document.getElementById('impFile').click()">Import</button>
       <button class="ghost" onclick="resetScores()">Reset all</button>
     </div>
-    <p class="muted" style="font-size:12px">Export creates a signed <b>.lgc</b> file you can send to your instructor. Besides your best levels, it includes a detailed record of your practice (problems seen, answers given, right/wrong, hints, and timestamps) so your instructor can see your effort. Import restores a previously exported file — e.g. to move your record to another computer.</p>
+    <p class="muted" style="font-size:12px">Export creates a signed <b>.lgc</b> file you can send to your instructor. It contains only your name, your best level for each set, and which sets you have finished. Nothing else about your practice is recorded. Import restores a previously exported file, for example to move your record to another computer.</p>
     <input type="file" id="impFile" style="display:none" accept=".lgc,.json,application/json,text/plain" onchange="importScores(event)">`);
 }
 function b64FromBytes(bytes){ let s=''; const CH=0x8000; for(let i=0;i<bytes.length;i+=CH) s+=String.fromCharCode.apply(null,bytes.subarray(i,Math.min(i+CH,bytes.length))); return btoa(s); }
 function bytesFromB64(b64){ const s=atob(b64); const u=new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
 window.exportScores=async function(){
-  const payload={v:2,name:state.name||'',place:state.place||'',inst:state.installId,at:Date.now(),trim:!!state.logTrim,completed:state.completed||{},log:state.log||[]};
+  const payload={v:3,name:state.name||'',completed:state.completed||{}};
   const raw=new TextEncoder().encode(JSON.stringify(payload));
   let flag='p', body;
   try{
@@ -9176,6 +9130,10 @@ window.exportScores=async function(){
   const who=(state.name||'me').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_')||'me';
   a.download=`logicola-${who}-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.lgc`; a.click();
 };
+function cleanCompleted(c){
+  const out={}; if(c && typeof c==='object') for(const k in c){ const n=+c[k]; if(SETS[k] && n>0) out[k]=Math.min(9,Math.round(n)); }
+  return out;
+}
 window.importScores=function(ev){
   const f=ev.target.files[0]; if(!f)return; ev.target.value='';
   const r=new FileReader();
@@ -9193,24 +9151,23 @@ window.importScores=function(ev){
           bytes=new Uint8Array(await new Response(st).arrayBuffer());
         }
         const d=JSON.parse(new TextDecoder().decode(bytes));
-        if(d.name) state.name=d.name; if(d.place) state.place=d.place;
-        state.completed=d.completed||{};
-        state.log=Array.isArray(d.log)?d.log:[];
-        if(d.inst) state.installId=d.inst;
-        if(d.trim) state.logTrim=true;
-        save(); tlog('I');
+        if(d.name) state.name=d.name;
+        state.completed=cleanCompleted(d.completed);   /* older files: any practice log in them is ignored */
+        save();
         updateScoreBar(); scoresView();
         if(!okMac) alert('Note: this file did not pass its integrity check (it may have been edited). It was imported anyway, but an instructor page would flag it.');
       } else {
-        const d=JSON.parse(txt); state=Object.assign(state,d);
-        if(!Array.isArray(state.log)) state.log=[];
-        save(); tlog('I'); updateScoreBar(); scoresView();
+        const d=JSON.parse(txt);
+        if(!d || typeof d!=='object' || !d.completed) throw new Error('format');
+        if(d.name) state.name=d.name;
+        state.completed=cleanCompleted(d.completed);
+        save(); updateScoreBar(); scoresView();
       }
-    }catch(e){ alert('Could not read that file.'); }
+    }catch(e){ alert('Could not read that file. Choose a .lgc score file exported from LogiCola.'); }
   };
   r.readAsText(f);
 };
-window.resetScores=function(){ if(confirm('Erase all completion records and the practice log?')){ state.completed={}; state.log=[]; delete state.logTrim; save(); tlog('R'); scoresView(); } };
+window.resetScores=function(){ if(confirm('Erase all completion records?')){ state.completed={}; save(); scoresView(); } };
 
 /* ---- titles + one-line "about" blurbs per set ---- */
 const SET_TITLES={

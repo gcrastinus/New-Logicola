@@ -269,6 +269,55 @@
 </style>
 </head>
 <body>
+<!-- Single-instance lock: only one copy of the student app per browser -->
+<div id="nlcLockOverlay" role="alertdialog" aria-modal="true" aria-labelledby="nlcLockMsg" hidden
+  style="position:fixed;inset:0;z-index:2147483647;background:rgba(6,18,31,.97);display:none;align-items:center;justify-content:center;padding:24px">
+  <div style="max-width:760px;background:#12395c;border:3px solid #ffd23f;border-radius:18px;padding:36px 32px;text-align:center;color:#eef6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+    <p id="nlcLockMsg" style="font-size:34px;line-height:1.4;font-weight:700;margin:0 0 28px">New LogiCola is already open in another tab or window. Please use that one, or close it and click "Try again".</p>
+    <button id="nlcLockRetry" type="button" style="font-size:32px;font-weight:800;padding:16px 44px;border-radius:14px;border:0;background:#ffd23f;color:#0b2438;cursor:pointer">Try again</button>
+    <p id="nlcLockNote" aria-live="polite" style="font-size:26px;margin:22px 0 0;color:#ffd23f;min-height:1.4em"></p>
+  </div>
+</div>
+<script>
+(function(){
+  var NAME='newlogicola-single-instance', KEY='newlogicola-instance-lock', STALE=5000, BEAT=1500;
+  var ov=document.getElementById('nlcLockOverlay'), note=document.getElementById('nlcLockNote');
+  var blocked=false, id=Math.random().toString(36).slice(2)+Date.now();
+  function stop(e){ if(blocked && !ov.contains(e.target)){ e.stopImmediatePropagation(); e.preventDefault(); } }
+  ['keydown','keypress','keyup','click','mousedown','pointerdown','touchstart','input','submit','focusin'].forEach(function(t){ window.addEventListener(t,stop,true); });
+  function block(){ blocked=true; window.__nlcBlocked=true; ov.hidden=false; ov.style.display='flex'; document.getElementById('nlcLockRetry').focus(); }
+  function unblock(){ blocked=false; window.__nlcBlocked=false; ov.hidden=true; ov.style.display='none'; note.textContent=''; }
+  var useLocks=!!(navigator.locks && navigator.locks.request);
+  var waiting=false;
+  function hold(){ unblock(); return new Promise(function(){}); }
+  function tryLocks(){
+    navigator.locks.request(NAME,{ifAvailable:true},function(lock){
+      if(lock) return hold();
+      block();
+      if(!waiting){ waiting=true; navigator.locks.request(NAME,function(){ waiting=false; return hold(); }); }
+    });
+  }
+  /* Fallback: localStorage heartbeat */
+  function read(){ try{ return JSON.parse(localStorage.getItem(KEY)||'null'); }catch(e){ return null; } }
+  function write(){ try{ localStorage.setItem(KEY,JSON.stringify({id:id,t:Date.now()})); }catch(e){} }
+  var timer=null;
+  function tryStorage(){
+    var cur=read();
+    if(!cur || cur.id===id || Date.now()-cur.t>STALE){ write(); unblock();
+      if(!timer) timer=setInterval(function(){ var c=read(); if(c && c.id!==id && Date.now()-c.t<=STALE){ clearInterval(timer); timer=null; block(); } else write(); },BEAT);
+    } else block();
+  }
+  if(!useLocks){
+    setInterval(function(){ if(blocked) tryStorage(); },BEAT);
+    window.addEventListener('pagehide',function(){ var c=read(); if(c && c.id===id) try{ localStorage.removeItem(KEY); }catch(e){} });
+  }
+  function attempt(){ if(useLocks) tryLocks(); else tryStorage(); }
+  document.getElementById('nlcLockRetry').addEventListener('click',function(){
+    attempt(); setTimeout(function(){ if(blocked) note.textContent='The other copy is still open.'; },400);
+  });
+  attempt();
+})();
+</script>
 <div id="app">
   <header class="bar">
     <div class="brand" role="button" tabindex="0" title="Back to the welcome page" onclick="goHome()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goHome()}"><svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LC"><defs><linearGradient id="lncg" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stop-color="#63ecdc"/><stop offset="1" stop-color="#15b3a0"/></linearGradient></defs><rect x="5" y="5" width="90" height="90" rx="24" fill="url(#lncg)" stroke="#0b2338" stroke-opacity="0.2" stroke-width="3"/><g fill="#0b2338" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-weight="800" font-size="53" text-anchor="middle"><text x="32" y="49">L</text><text x="69" y="88">C</text></g></svg> LogiCola</div>

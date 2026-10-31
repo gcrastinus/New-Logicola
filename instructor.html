@@ -19,7 +19,7 @@
   .brand{font-weight:800;letter-spacing:.5px;color:var(--accent);font-size:22px;display:flex;align-items:center;gap:8px}
   .logo{width:31px;height:31px;display:inline-block;vertical-align:middle;flex:0 0 auto;
     filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
-  .sub{color:var(--muted);font-size:14px}
+  .sub{color:#c9dcec;font-size:16px}
   .muted{color:var(--muted)}
   button{font:inherit;cursor:pointer;border:0}
   .mbtn{background:var(--btn);color:var(--ink);padding:7px 12px;border-radius:8px;border:1px solid var(--line)}
@@ -28,34 +28,44 @@
     background:var(--panel2);transition:border-color .15s, background .15s}
   .drop.over{border-color:var(--accent);background:#123a5e}
   .drop b{color:var(--accent)}
-  table.roster{width:100%;border-collapse:collapse;margin-top:14px;font-size:14px}
-  table.roster th,table.roster td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
-  table.roster th{background:var(--panel2);color:var(--muted);font-weight:600;white-space:nowrap}
-  table.roster tr.stu{cursor:pointer}
-  table.roster tr.stu:hover td{background:#12395c}
-  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap;line-height:1;vertical-align:middle}
+  table.roster{width:100%;border-collapse:collapse;margin-top:14px;font-size:16px}
+  table.roster th,table.roster td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  table.roster th{background:var(--panel2);color:var(--ink);font-weight:700}
+  .pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:16px;font-weight:700;white-space:nowrap;line-height:1.2;vertical-align:middle}
   .pill.ok{background:rgba(90,209,122,.15);color:var(--good);border:1px solid var(--good)}
   .pill.bad{background:rgba(255,107,107,.15);color:var(--bad);border:1px solid var(--bad)}
   .pill.warn{background:rgba(255,179,71,.13);color:var(--warn);border:1px solid var(--warn)}
-  .pill.legacy{background:rgba(159,192,220,.12);color:var(--muted);border:1px solid var(--muted)}
-  .flagline{font-size:13px;margin:3px 0;padding-left:20px;text-indent:-20px}
+  .pill.legacy{background:rgba(159,192,220,.12);color:var(--ink);border:1px solid var(--muted)}
+  .flagline{font-size:16px;margin:3px 0;padding-left:24px;text-indent:-24px}
   .flagline.bad::before{content:"⛔ ";}
   .flagline.warn::before{content:"⚠️ ";}
   .flagline.info::before{content:"ℹ️ ";}
-  .detail{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:6px 0 14px}
-  .detail h3{margin:6px 0 8px;color:var(--accent);font-size:16px}
-  table.sets{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
-  table.sets th,table.sets td{border:1px solid var(--line);padding:5px 8px;text-align:left}
-  table.sets th{background:#0e2c49;color:var(--muted);font-weight:600}
-  table.sets td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .expand{background:var(--btn);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:16px;margin-top:6px}
+  .expand:hover,.expand:focus-visible{background:var(--btnh);outline:2px solid var(--accent)}
+  tr.detailrow > td{background:var(--panel2);padding:12px}
+  .setblock{margin:0 0 14px}
+  .setblock h3{margin:4px 0 6px;color:var(--accent);font-size:18px}
+  table.acts{width:100%;border-collapse:collapse;font-size:16px}
+  table.acts th,table.acts td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+  table.acts th{background:#0e2c49;color:var(--ink);font-weight:700}
+  .yes{color:var(--good);font-weight:700}
+  .no{color:#c9dcec}
   .lvl{color:var(--good);font-weight:700}
-  .logwrap{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:8px}
-  .evt .k-c{color:var(--good)} .evt .k-w{color:var(--bad)} .evt .k-r,.evt .k-h{color:var(--warn)}
   .rowbtns{display:flex;gap:10px;margin:16px 0;flex-wrap:wrap}
-  .note{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted);margin-top:22px;line-height:1.55}
+  .note{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:16px;color:#c9dcec;margin-top:22px;line-height:1.55}
   .note b{color:var(--ink)}
-  select{font:inherit;background:var(--btn);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 8px}
   h2{margin:26px 0 4px}
+  /* narrow screens: each table row becomes a card */
+  @media (max-width:600px){
+    table.roster, table.roster tbody, table.roster tr, table.roster td,
+    table.acts, table.acts tbody, table.acts tr, table.acts td{display:block;width:100%}
+    table.roster tr.head, table.acts tr.head{position:absolute;left:-9999px}
+    table.roster tr.stu{border:1px solid var(--line);border-radius:12px;margin:12px 0;background:var(--panel)}
+    table.roster td, table.acts td{border:0;border-bottom:1px solid var(--line)}
+    table.roster td::before, table.acts td::before{content:attr(data-h);display:block;color:#c9dcec;font-weight:700}
+    table.acts tr{border:1px solid var(--line);border-radius:10px;margin:8px 0}
+    tr.detailrow{display:block}
+  }
 </style>
 </head>
 <body>
@@ -69,15 +79,15 @@
     <p style="font-size:16px;margin:4px 0"><b>Drop student score files here</b>, or</p>
     <button class="mbtn" onclick="document.getElementById('fileIn').click()">Choose files</button>
     <input type="file" id="fileIn" multiple accept=".lgc,.json,text/plain,application/json" style="display:none">
-    <p class="muted" style="font-size:13px;margin-bottom:2px">You can select a whole folder's worth at once. Nothing is uploaded anywhere; the files are read in your browser.</p>
+    <p class="muted" style="font-size:16px;margin-bottom:2px">You can select a whole folder's worth at once. Nothing is uploaded anywhere; the files are read in your browser.</p>
   </div>
 
-  <div id="results"></div>
+  <div id="results" aria-live="polite"></div>
   <input type="file" id="canvasIn" accept=".csv,text/csv" style="display:none" onchange="canvasExport(this.files[0]);this.value=''">
 
   <div class="note">
-    <b>What a score file contains.</b> Only the student's name, their best level for each set, and which sets they have finished.
-    LogiCola does not record answers, timing, or any other practice details.
+    <b>What a score file contains.</b> The student's name, their best level for each set, and, for each activity and difficulty they finished: the best level, the first and last dates, how many times, whether answers were typed or picked from a list (MC), and the logic system used.
+    LogiCola does not record answers or any other practice details. Files exported before this version show only "done" for a set; the activity and difficulty were not recorded then, so they are marked <b>older format</b>.
     <br><br>
     <b>File check.</b> <span class="pill ok">verified</span> means the file is exactly what LogiCola exported.
     <span class="pill bad">altered</span> means its signature does not match: it was edited after export, or damaged in transit, so ask the student to export it again.
@@ -185,20 +195,45 @@ async function parseFile(fileName, text){
   return rec;
 }
 
+const CATALOG={"A":[["-","Whole set",[["easier","Easier"],["harder","Harder"]]]],"B":[["star","How to star",[["-",""]]],["sym","Symbolic arguments",[["-",""]]],["english","English arguments",[["-",""]]],["derive","Deriving conclusions",[["-",""]]],["find","Find the conclusion",[["-",""]]],["venn","Venn diagrams",[["-",""]]],["idiom","Idiomatic arguments",[["-",""]]]],"C":[["easy","Easier",[["-",""]]],["hard","Harder",[["-",""]]]],"D":[["eval","Truth evaluations",[["easier","Easier"],["harder","Harder"]]],["unknown","Unknown evaluations",[["easier","Easier"],["harder","Harder"]]],["table","Formula truth tables",[["easier","Easier"],["harder","Harder"]]],["argtable","Argument truth tables",[["easier","Easier"],["harder","Harder"]]]],"E":[["sym","Symbolic arguments",[["-",""]]],["english","English arguments",[["-",""]]],["find","Find the conclusion",[["-",""]]],["idiom","Idiomatic arguments",[["-",""]]]],"F":[["s","S-rules",[["easier","Easier"],["harder","Harder"]]],["i","I-rules",[["easier","Easier"],["harder","Harder"]]],["c","S & I combined",[["easier","Easier"],["harder","Harder"]]],["t","With ≡ (three-bar)",[["easier","Easier"],["harder","Harder"]]]],"G":[["valid","Valid proofs",[["easier","Easier"],["harder","Harder"],["mixed","Mixed"]]],["invalid","Invalid proofs",[["easier","Easier"],["harder","Harder"],["mixed","Mixed"]]],["both","Valid & invalid",[["easier","Easier"],["harder","Harder"],["mixed","Mixed"]]],["copi","Copi proofs",[["easier","Easier"],["harder","Harder"],["mixed","Mixed"]]],["tree","Truth trees",[["easier","Easier"],["harder","Harder"],["mixed","Mixed"]]]],"H":[["easy","Easier",[["-",""]]],["hard","Harder",[["-",""]]],["ident","Identity",[["-",""]]],["rel","Relational",[["-",""]]]],"I":[["valid","Valid proofs",[["easier","Easier"],["harder","Harder"],["mixed","Mixed"],["rel","Relations"],["ident","Identity"],["all","Everything"]]],["invalid","Invalid proofs",[["easier","Easier"],["harder","Harder"],["mixed","Mixed"],["rel","Relations"],["ident","Identity"],["all","Everything"]]],["both","Valid & invalid",[["easier","Easier"],["harder","Harder"],["mixed","Mixed"],["rel","Relations"],["ident","Identity"],["all","Everything"]]],["copi","Copi proofs",[["easier","Easier"],["harder","Harder"],["mixed","Mixed"],["rel","Relations"],["ident","Identity"],["all","Everything"]]]],"J":[["basic","Basic",[["-",""]]],["harder","Harder",[["-",""]]],["quant","Quantified",[["-",""]]]],"K":[["valid","Valid proofs",[["easier","Easier"],["harder","Harder"],["mixed","Mixed"]]],["invalid","Invalid proofs",[["easier","Easier"],["harder","Harder"],["mixed","Mixed"]]],["both","Valid & invalid",[["easier","Easier"],["harder","Harder"],["mixed","Mixed"]]],["galactic","Galactic travel",[["S5","S5"],["T","T"],["S4","S4"],["B","B"]]],["quant","Quantified modal proofs",[["-",""]]]],"L":[["imp","Imperative translations",[["-",""]]],["deon","Deontic translations",[["-",""]]]],"M":[["imp","Imperative arguments",[["-",""]]],["proof","Deontic proofs",[["-",""]]]],"N":[["belief","Belief translations",[["-",""]]],["will","Willing translations",[["-",""]]],["rat","Rationality translations",[["-",""]]]],"O":[["-","Whole set",[["-",""]]]],"P":[["cards","Cards",[["-",""]]],["dice","Dice",[["-",""]]],["coins","Coins",[["-",""]]],["odds","Odds",[["-",""]]],["rules","Rules",[["-",""]]],["gamble","Gamble & decide",[["-",""]]],["induct","Induction",[["-",""]]]],"Q":[["-","Whole set",[["-",""]]]],"R":[["spot","Spot the fallacy",[["-",""]]],["match","Definitions",[["-",""]]]],"S":[["basics","Membership & notation",[["-",""]]],["ops","Operations",[["-",""]]],["power","Subsets & power sets",[["-",""]]],["pairs","Pairs & products",[["-",""]]],["laws","Laws of sets",[["-",""]]],["inf","Infinity",[["-",""]]]],"T":[["lang","Language & metalanguage",[["-",""]]],["gram","Grammar & wffs",[["-",""]]],["sem","Syntax vs semantics",[["-",""]]],["meta","Metatheory",[["-",""]]],["reg","Regimented English",[["-",""]]]]};
+const ANS_LABEL={typed:'typed answers', MC:'multiple choice'};
+
 /* ===== analysis =====
-   A score file holds only the student's name, best level per set, and which sets
-   are finished. Older files may also carry a practice log; it is ignored. */
+   A score file holds the student's name, best level per set, and (version 4 and
+   later) a record of each activity and difficulty finished. */
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+const okDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)?v:'';
+function readDone(raw){
+  const out={};
+  if(!raw||typeof raw!=='object') return out;
+  for(const sid of SET_IDS){
+    const S=raw[sid]; if(!S||typeof S!=='object') continue;
+    for(const act of Object.keys(S)){
+      const A=S[act]; if(!A||typeof A!=='object') continue;
+      for(const diff of Object.keys(A)){
+        const r=A[diff]; if(!r||typeof r!=='object') continue;
+        const lv=Math.min(9,Math.max(0,Math.round(+r.lv||0))); if(!lv) continue;
+        (out[sid]=out[sid]||{});(out[sid][act]=out[sid][act]||{});
+        out[sid][act][diff]={lv, first:okDate(r.first), last:okDate(r.last), n:Math.max(1,Math.round(+r.n||1)),
+          ans:r.ans==='typed'?'typed':(r.ans==='MC'?'MC':''), sys:typeof r.sys==='string'?r.sys.slice(0,20):''};
+      }
+    }
+  }
+  return out;
+}
 function analyze(rec){
   const d=rec.data||{};
   const completed={};
   if(d.completed && typeof d.completed==='object')
     for(const k of SET_IDS){ const n=+d.completed[k]; if(n>0) completed[k]=Math.min(9,Math.round(n)); }
-  const a={fileName:rec.fileName, integrity:rec.integrity, name:d.name||'(no name set)', completed, flags:[]};
+  const v=+d.v||1;
+  const a={fileName:rec.fileName, integrity:rec.integrity, name:d.name||'(no name set)', completed,
+    version:v, older:v<4, done:v>=4?readDone(d.done):{}, flags:[]};
   const flag=(level,msg)=>a.flags.push({level,msg});
   if(rec.integrity==='unreadable') flag('bad','This file could not be read. Ask the student to export it again.');
   if(rec.integrity==='edited') flag('bad','Signature check failed: the file was changed after export, or damaged. Ask the student to export it again.');
   if(rec.integrity==='legacy') flag('warn','Old unsigned file: the levels cannot be verified.');
+  if(rec.integrity!=='unreadable' && a.older) flag('info','Older format: shows which sets are done, but not which activity or difficulty.');
   return a;
 }
 
@@ -212,6 +247,7 @@ drop.addEventListener('drop',e=>handleFiles(e.dataTransfer.files));
 fileIn.addEventListener('change',e=>{ handleFiles(e.target.files); e.target.value=''; });
 
 async function handleFiles(list){
+  list=Array.from(list||[]);   // copy first: the file picker is cleared right after this starts
   for(const f of list){
     const text=await f.text();
     const rec=await parseFile(f.name,text);
@@ -227,29 +263,86 @@ function badge(a){
   return '<span class="pill bad">altered</span>';
 }
 function levelsSummary(a){
-  const parts=SET_IDS.filter(s=>a.completed[s]).map(s=>`${s}<span class="lvl">${a.completed[s]}</span>`);
-  return parts.length?parts.join(' '):'<span class="muted">none</span>';
+  const parts=SET_IDS.filter(s=>a.completed[s]).map(s=>`${s}&nbsp;<span class="lvl">${a.completed[s]}</span>`);
+  return parts.length?parts.join(', '):'<span class="no">none</span>';
 }
+/* every activity × difficulty the app offers, plus anything unexpected in the file */
+function slotsFor(a,sid){
+  const rows=[];
+  const seen=new Set();
+  (CATALOG[sid]||[]).forEach(([act,label,diffs])=>diffs.forEach(([dk,dl])=>{
+    seen.add(act+'|'+dk); rows.push({act,label,dk,dl,r:((a.done[sid]||{})[act]||{})[dk]});
+  }));
+  const S=a.done[sid]||{};
+  Object.keys(S).forEach(act=>Object.keys(S[act]).forEach(dk=>{
+    if(!seen.has(act+'|'+dk)) rows.push({act,label:act,dk,dl:dk==='-'?'':dk,r:S[act][dk]});
+  }));
+  return rows;
+}
+function plural(n,w){ return n+' '+w+(n===1?'':'s'); }
+function slotCell(r){
+  if(!r) return '<span class="no">not done</span>';
+  return `<span class="yes">✔ level ${r.lv}</span>${r.last?`, last ${esc(r.last)}`:''}`;
+}
+function slotNotes(r){
+  if(!r) return '';
+  const bits=[];
+  if(r.first && r.first!==r.last) bits.push('first '+esc(r.first));
+  bits.push('finished '+plural(r.n,'time'));
+  if(r.ans) bits.push(ANS_LABEL[r.ans]);
+  if(r.sys) bits.push('system: '+esc(r.sys));
+  return bits.join('; ');
+}
+function detailHtml(a){
+  let h='';
+  if(a.integrity==='unreadable') return '<p>No details: the file could not be read.</p>';
+  SET_IDS.forEach(sid=>{
+    const title=`Set ${sid}: ${esc(SET_TITLES[sid])}`;
+    if(a.older){
+      h+=`<div class="setblock"><h3>${title}</h3><p>${a.completed[sid]
+        ?`<span class="yes">✔ Done</span>, activity and difficulty not recorded (best level ${a.completed[sid]}). <span class="pill legacy">older format</span>`
+        :'<span class="no">not done</span>'}</p></div>`;
+      return;
+    }
+    const rows=slotsFor(a,sid);
+    const nDone=rows.filter(x=>x.r).length;
+    h+=`<div class="setblock"><h3>${title} <span style="font-weight:400;color:#c9dcec;font-size:16px">· ${nDone} of ${rows.length} done${a.completed[sid]?`, best level ${a.completed[sid]}`:''}</span></h3>
+      <table class="acts"><tr class="head"><th scope="col">Activity</th><th scope="col">Difficulty</th><th scope="col">Result</th><th scope="col">Notes</th></tr>`;
+    rows.forEach(x=>{
+      h+=`<tr><td data-h="Activity">${esc(x.label)}</td><td data-h="Difficulty">${esc(x.dl)||'—'}</td><td data-h="Result">${slotCell(x.r)}</td><td data-h="Notes">${slotNotes(x.r)||'—'}</td></tr>`;
+    });
+    h+='</table>';
+    if(a.completed[sid] && !nDone) h+=`<p>Done at level ${a.completed[sid]} before this version recorded activities. <span class="pill legacy">older format</span></p>`;
+    h+='</div>';
+  });
+  return h;
+}
+const openRows=new Set();
+window.toggleStu=function(i){ openRows.has(i)?openRows.delete(i):openRows.add(i); render(i); };
 
-function render(){
+function render(focusIdx){
   if(!students.length){ results.innerHTML=''; return; }
-  let html=`<h2>Class overview <span class="muted" style="font-size:14px;font-weight:400">· ${students.length} file${students.length>1?'s':''}</span></h2>
+  let html=`<h2>Class overview <span style="font-size:16px;font-weight:400;color:#c9dcec">· ${students.length} file${students.length>1?'s':''}</span></h2>
   <div class="rowbtns"><button class="mbtn" onclick="exportCsv()">Download CSV summary</button>
   <button class="mbtn" onclick="document.getElementById('canvasIn').click()" title="Pick the gradebook CSV you exported from Canvas (Grades, then Export). LogiCola adds a column per set with each student's best level, ready for Canvas Grades, then Import.">Download Canvas gradebook CSV</button>
-  <button class="mbtn" onclick="if(confirm('Clear all loaded files?')){students.length=0;render();}">Clear</button></div>
-  <table class="roster"><tr><th>Student</th><th>File check</th><th>Sets finished</th><th>Best level per set</th><th>Notes</th></tr>`;
-  students.forEach(a=>{
+  <button class="mbtn" onclick="if(confirm('Clear all loaded files?')){students.length=0;openRows.clear();render();}">Clear</button></div>
+  <table class="roster"><tr class="head"><th scope="col">Student</th><th scope="col">File check</th><th scope="col">Sets finished</th><th scope="col">Best level per set</th><th scope="col">Notes</th></tr>`;
+  students.forEach((a,i)=>{
     const n=SET_IDS.filter(s=>a.completed[s]).length;
-    html+=`<tr>
-      <td><b>${esc(a.name)}</b><br><span class="muted" style="font-size:11px">${esc(a.fileName)}</span></td>
-      <td>${badge(a)}</td>
-      <td>${n}</td>
-      <td>${levelsSummary(a)}</td>
-      <td style="font-size:13px">${a.flags.length?a.flags.map(f=>`<div class="flagline ${f.level}">${esc(f.msg)}</div>`).join(''):'<span class="muted">none</span>'}</td>
+    const open=openRows.has(i);
+    html+=`<tr class="stu">
+      <td data-h="Student"><b>${esc(a.name)}</b><br><span style="color:#c9dcec">${esc(a.fileName)}</span><br>
+        <button class="expand" id="exp${i}" aria-expanded="${open}" aria-controls="det${i}" onclick="toggleStu(${i})">${open?'Hide':'Show'} every activity</button></td>
+      <td data-h="File check">${badge(a)}</td>
+      <td data-h="Sets finished">${n}</td>
+      <td data-h="Best level per set">${levelsSummary(a)}</td>
+      <td data-h="Notes">${a.flags.length?a.flags.map(f=>`<div class="flagline ${f.level}">${esc(f.msg)}</div>`).join(''):'<span class="no">none</span>'}</td>
     </tr>`;
+    if(open) html+=`<tr class="detailrow" id="det${i}"><td colspan="5">${detailHtml(a)}</td></tr>`;
   });
   html+='</table>';
   results.innerHTML=html;
+  if(focusIdx!=null){ const b=document.getElementById('exp'+focusIdx); if(b) b.focus(); }
 }
 
 /* ===== Canvas gradebook export =====
@@ -317,12 +410,33 @@ window.canvasExport=async function(file){
   alert(msg);
 };
 
+/* Class CSV: one row per student, one column per set × activity × difficulty.
+   A cell holds the best level reached there (blank = not done). Older files,
+   which do not record activities, put their best level in the set's
+   "older_format_best_level" column instead. */
+function csvColumns(){
+  const cols=[];
+  SET_IDS.forEach(sid=>{
+    cols.push({sid,older:true,h:'set'+sid+'_older_format_best_level'});
+    const seen=new Set();
+    (CATALOG[sid]||[]).forEach(([act,label,diffs])=>diffs.forEach(([dk])=>{ seen.add(act+'|'+dk);
+      cols.push({sid,act,dk,h:'set'+sid+'_'+(act==='-'?'set':act)+(dk==='-'?'':'_'+dk)}); }));
+    students.forEach(a=>{ const S=a.done[sid]||{}; Object.keys(S).forEach(act=>Object.keys(S[act]).forEach(dk=>{
+      if(!seen.has(act+'|'+dk)){ seen.add(act+'|'+dk); cols.push({sid,act,dk,h:'set'+sid+'_'+act+(dk==='-'?'':'_'+dk)}); } })); });
+  });
+  return cols;
+}
 window.exportCsv=function(){
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  const lines=[['name','file','file_check','sets_finished',...SET_IDS.map(s=>'set'+s+'_best_level')].join(',')];
+  const cols=csvColumns();
+  const lines=[['name','file','file_check','file_format','sets_finished',...SET_IDS.map(s=>'set'+s+'_best_level'),...cols.map(c=>c.h)].join(',')];
   students.forEach(a=>{
-    lines.push([q(a.name),q(a.fileName),q(a.integrity),SET_IDS.filter(s=>a.completed[s]).length,
-      ...SET_IDS.map(s=>a.completed[s]||'')].join(','));
+    lines.push([q(a.name),q(a.fileName),q(a.integrity),q(a.older?'older':'v'+a.version),SET_IDS.filter(s=>a.completed[s]).length,
+      ...SET_IDS.map(s=>a.completed[s]||''),
+      ...cols.map(c=>{
+        if(c.older) return a.older?(a.completed[c.sid]||''):'';
+        const r=((a.done[c.sid]||{})[c.act]||{})[c.dk]; return r?r.lv:'';
+      })].join(','));
   });
   const aEl=document.createElement('a');
   aEl.href=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/csv'}));

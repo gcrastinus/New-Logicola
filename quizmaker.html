@@ -1271,6 +1271,59 @@ $('printBtn').onclick = () => window.print();
 </style>
 </head>
 <body>
+<!-- Single-instance lock: only one copy of the student app per browser -->
+<div id="nlcLockOverlay" role="alertdialog" aria-modal="true" aria-labelledby="nlcLockMsg" hidden
+  style="position:fixed;inset:0;z-index:2147483647;background:rgba(6,18,31,.97);display:none;align-items:center;justify-content:center;padding:24px">
+  <div style="max-width:760px;background:#12395c;border:3px solid #ffd23f;border-radius:18px;padding:36px 32px;text-align:center;color:#eef6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+    <p id="nlcLockMsg" style="font-size:34px;line-height:1.4;font-weight:700;margin:0 0 28px">New LogiCola is already open in another tab or window. Please use that one, or close it and click "Try again".</p>
+    <button id="nlcLockRetry" type="button" style="font-size:32px;font-weight:800;padding:16px 44px;border-radius:14px;border:0;background:#ffd23f;color:#0b2438;cursor:pointer">Try again</button>
+    <p id="nlcLockNote" aria-live="polite" style="font-size:26px;margin:22px 0 0;color:#ffd23f;min-height:1.4em"></p>
+  </div>
+</div>
+<script>
+(function(){
+  /* Inside a frame (Quiz Maker, the instructors' page) the lock is skipped:
+     the page around it is the one "copy" of the app. */
+  var framed; try{ framed = window.self !== window.top; }catch(e){ framed = true; }
+  if(framed) return;
+  var NAME='newlogicola-single-instance', KEY='newlogicola-instance-lock', STALE=5000, BEAT=1500;
+  var ov=document.getElementById('nlcLockOverlay'), note=document.getElementById('nlcLockNote');
+  var blocked=false, id=Math.random().toString(36).slice(2)+Date.now();
+  function stop(e){ if(blocked && !ov.contains(e.target)){ e.stopImmediatePropagation(); e.preventDefault(); } }
+  ['keydown','keypress','keyup','click','mousedown','pointerdown','touchstart','input','submit','focusin'].forEach(function(t){ window.addEventListener(t,stop,true); });
+  function block(){ blocked=true; window.__nlcBlocked=true; ov.hidden=false; ov.style.display='flex'; document.getElementById('nlcLockRetry').focus(); }
+  function unblock(){ blocked=false; window.__nlcBlocked=false; ov.hidden=true; ov.style.display='none'; note.textContent=''; }
+  var useLocks=!!(navigator.locks && navigator.locks.request);
+  var waiting=false;
+  function hold(){ unblock(); return new Promise(function(){}); }
+  function tryLocks(){
+    navigator.locks.request(NAME,{ifAvailable:true},function(lock){
+      if(lock) return hold();
+      block();
+      if(!waiting){ waiting=true; navigator.locks.request(NAME,function(){ waiting=false; return hold(); }); }
+    });
+  }
+  /* Fallback: localStorage heartbeat */
+  function read(){ try{ return JSON.parse(localStorage.getItem(KEY)||'null'); }catch(e){ return null; } }
+  function write(){ try{ localStorage.setItem(KEY,JSON.stringify({id:id,t:Date.now()})); }catch(e){} }
+  var timer=null;
+  function tryStorage(){
+    var cur=read();
+    if(!cur || cur.id===id || Date.now()-cur.t>STALE){ write(); unblock();
+      if(!timer) timer=setInterval(function(){ var c=read(); if(c && c.id!==id && Date.now()-c.t<=STALE){ clearInterval(timer); timer=null; block(); } else write(); },BEAT);
+    } else block();
+  }
+  if(!useLocks){
+    setInterval(function(){ if(blocked) tryStorage(); },BEAT);
+    window.addEventListener('pagehide',function(){ var c=read(); if(c && c.id===id) try{ localStorage.removeItem(KEY); }catch(e){} });
+  }
+  function attempt(){ if(useLocks) tryLocks(); else tryStorage(); }
+  document.getElementById('nlcLockRetry').addEventListener('click',function(){
+    attempt(); setTimeout(function(){ if(blocked) note.textContent='The other copy is still open.'; },400);
+  });
+  attempt();
+})();
+<\/script>
 <div id="app">
   <header class="bar">
     <div class="brand" role="button" tabindex="0" title="Back to the welcome page" onclick="goHome()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goHome()}"><svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LC"><defs><linearGradient id="lncg" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stop-color="#63ecdc"/><stop offset="1" stop-color="#15b3a0"/></linearGradient></defs><rect x="5" y="5" width="90" height="90" rx="24" fill="url(#lncg)" stroke="#0b2338" stroke-opacity="0.2" stroke-width="3"/><g fill="#0b2338" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-weight="800" font-size="53" text-anchor="middle"><text x="32" y="49">L</text><text x="69" y="88">C</text></g></svg> LogiCola</div>
@@ -1313,7 +1366,7 @@ $('printBtn').onclick = () => window.print();
         <li><b>Definitions</b> — spotting what's wrong with a proposed definition. <span class="muted">Set Q</span></li>
         <li><b>Fallacies</b> — naming the common mistakes that make bad arguments look convincing. <span class="muted">Set R</span></li>
       </ul>
-      <p class="muted" style="margin-top:10px">Master a proof set — <b>G</b>, <b>I</b>, or <b>K</b> — at level 9 to unlock its ungraded <b>Proof Builder</b>, a free-form practice workspace. Mastering <b>Set I</b> at level 9 also unlocks the <b>Non-Classical Workbench</b> — free logic, intuitionistic logic, and <b>medieval term logic</b> — with a <b>validity checker</b> and a <b>proof builder</b> for each system.</p>
+      <p class="muted" id="unlockNote" style="margin-top:10px">Master a proof set — <b>G</b>, <b>I</b>, or <b>K</b> — at level 9 to unlock its ungraded <b>Proof Builder</b>, a free-form practice workspace. Mastering <b>Set I</b> at level 9 also unlocks the <b>Non-Classical Workbench</b> — free logic, intuitionistic logic, and <b>medieval term logic</b> — with a <b>validity checker</b> and a <b>proof builder</b> for each system.</p>
     </div>
   </main>
 </div>
@@ -1321,6 +1374,18 @@ $('printBtn').onclick = () => window.print();
 <!-- Overlay -->
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
 
+<script>
+/* Instructor edition = this same file opened as index.html?instructor=1
+   (instructors.html is a thin wrapper that does exactly that). */
+var INSTRUCTOR = /[?&]instructor=1(&|$)/.test(location.search);
+if(INSTRUCTOR){
+  document.title='LogiCola — For Instructors';
+  var brandEl=document.querySelector('.brand'); if(brandEl && brandEl.lastChild) brandEl.lastChild.textContent=' LogiCola — For Instructors';
+  var unl=document.getElementById('unlockNote');
+  var dc=document.querySelector('.designer-credit'); if(dc) dc.hidden=true;
+  if(unl) unl.innerHTML='Master a proof set — <b>G</b>, <b>I</b>, or <b>K</b> — at level 9 to unlock its ungraded <b>Proof Builder</b>, a free-form practice workspace. <b>Instructor edition:</b> all proof builders and the <b>Non-Classical Workbench</b> (free · intuitionistic · medieval term logic — validity checker &amp; proof builder) are open with no level-9 unlocks.';
+}
+<\/script>
 <script>
 "use strict";
 /* ============================================================================
@@ -1368,7 +1433,7 @@ function tokenize(s){
     if(ch===' ') continue;
     if('∼~¬!'.includes(ch)) t.push('~');
     else if('•&∧'.includes(ch)) t.push('&');
-    else if('∨'.includes(ch)) t.push('|');
+    else if('∨'.includes(ch) || ch==='v') t.push('|');   // typed "v" means "or", as in Gensler's LogiCola
     else if('⊃→>'.includes(ch)) t.push('>');
     else if('≡↔'.includes(ch)) t.push('=');
     else if(ch==='(') t.push('(');
@@ -1380,12 +1445,21 @@ function tokenize(s){
 // Canonicalize a wff string for notation-agnostic answer comparison: maps every
 // accepted symbol variant to one internal form and normalizes quantifier styles,
 // so a student may answer in (x)-style or ∀-style, with & or •, → or ⊃, etc.
-function canonWff(s){
+function canonWff(s,mode){
   let x=String(s).replace(/\s+/g,'');
   x=x.replace(/[∼~¬!]/g,'~').replace(/[•&∧]/g,'&').replace(/[∨]/g,'v')
      .replace(/[⊃→>]/g,'>').replace(/[≡↔]/g,'=');
   x=x.replace(/\(∃([a-z])\)/g,'E$1').replace(/∃([a-z])/g,'E$1'); // existential -> E<var>
   x=x.replace(/∀([a-z])/g,'@$1').replace(/\(([a-z])\)/g,'@$1');  // universal   -> @<var>
+  if(mode==='proof') x=stripOuterParens(x);   // proof lines: "AvB" and "(AvB)" are the same answer
+  return x;
+}
+function stripOuterParens(x){
+  while(x.length>1 && x[0]==='(' && x[x.length-1]===')'){
+    let d=0, wraps=true;
+    for(let i=0;i<x.length;i++){ if(x[i]==='(') d++; else if(x[i]===')'){ d--; if(d===0&&i<x.length-1){ wraps=false; break; } } }
+    if(!wraps) break; x=x.slice(1,-1);
+  }
   return x;
 }
 // Recursive-descent parser with precedence ~ > & > | > (> , =)
@@ -3233,16 +3307,20 @@ function randAst(letters,depth){
   return Math.random()<0.28?mkNeg(f):f;
 }
 /* Run the mechanical strategy; returns a step script, or null if it stalls. */
-function provePropositional(prems, concl){
-  const lines=prems.map(f=>({f,asm:false,blocked:false}));
+function provePropositional(prems, concl, init){
+  /* init (optional): the proof so far, as [{f,asm,blocked}] with premises first.
+     Used to re-plan the rest of the proof after a student's own legal step. */
+  const lines=init ? init.map(L=>({f:L.f,asm:!!L.asm,blocked:!!L.blocked})) : prems.map(f=>({f,asm:false,blocked:false}));
   const steps=[];
   const live=()=>lines.map((L,i)=>({L,i})).filter(x=>!x.L.blocked);
   const liveHas=f=>live().some(x=>astEq(x.L.f,f));
   const lineNo=i=>i+1;
   const push=(f,asm,step)=>{ lines.push({f,asm,blocked:false}); steps.push(step); };
   // START: assume the conclusion's simpler contradictory
-  const asm0=astNegS(concl);
-  push(asm0,true,{kind:'asm', f:asm0, disp:'asm: '+astRender(asm0), typed:astStr(asm0), just:''});
+  if(!init){
+    const asm0=astNegS(concl);
+    push(asm0,true,{kind:'asm', f:asm0, disp:'asm: '+astRender(asm0), typed:astStr(asm0), just:''});
+  } else if(!lines.some(L=>!L.blocked&&L.asm)) return {valid:true, steps};
   let guard=0;
   while(guard++<300){
     // RAA?
@@ -3415,6 +3493,7 @@ function genGArg(hard, wantValid){
     script.prem=prems.map(astRender);
     script.premAst=prems;
     script.concl=astRender(concl);
+    script.eng={name:'prop', prems, concl};
     return script;
   }
   return null;
@@ -3454,6 +3533,115 @@ function proofPlayer(cfg){
     const shown=[];                          // {no, body, jt, star, raw}
     S.prem.forEach((q,i)=>shown.push({no:i+1, body:q, jt:'', star:false}));
     shown.push({no:'', body:`[${SYM.therefore} ${S.concl}`, jt:'', star:false});
+    /* ---- LEGALITY CHECKING (any legal Gensler proof is accepted) ----
+       pl mirrors the numbered lines: {f (AST, when the engine supplied one),
+       w (world prefix), asm, blocked, c (canonical text)}. A student's line is
+       accepted if it is the scripted next step, OR a legal S-/I-rule (or
+       quantifier/modal) step from live lines, OR an assumption that breaks an
+       unbroken wff, OR RAA once any two live lines contradict. After an
+       off-script step the rest of the proof (hints, "Get answer") is re-planned
+       from the lines actually on the page. REFUTE still needs full breakdown. */
+    const ENG=S.eng||null;
+    const stripTags=t=>String(t).replace(/<[^>]*>/g,'').replace(/&nbsp;/g,' ');
+    const canonRaw=t=>canonWff(stripTags(t));
+    const canonP=t=>canonWff(t,'proof');
+    const pl=(S.premAst&&S.premAst.length===premCount?S.premAst:S.prem.map(()=>null))
+      .map((f,i)=>({f, w:'', asm:false, blocked:false, c:canonRaw(S.prem[i])}));
+    let noPlan=false;
+    const fK=f=>qStr(f);
+    const fRender=f=> ENG&&ENG.name==='prop' ? astRender(f) : qRender(f);
+    const fTyped=f=> ENG&&ENG.name==='prop' ? astStr(f) : qRender(f);
+    const negS=f=> f.op==='~' ? f.a : mkNeg(f);
+    const isContra=(A,B)=>{
+      if((A.w||'')!==(B.w||'')) return false;
+      if(A.f&&B.f){ const x=fK(A.f), y=fK(B.f); return x==='~'+y||y==='~'+x; }
+      return A.c==='~'+B.c || B.c==='~'+A.c;
+    };
+    const liveIdx=()=>pl.map((L,i)=>i).filter(i=>!pl[i].blocked);
+    const openAsm=()=>{ for(let i=pl.length-1;i>=0;i--) if(!pl[i].blocked&&pl[i].asm) return i; return -1; };
+    const openAsmCount=()=>pl.filter(L=>!L.blocked&&L.asm).length;
+    const contraPair=()=>{ const lv=liveIdx();
+      for(let a=0;a<lv.length;a++) for(let b=a+1;b<lv.length;b++) if(isContra(pl[lv[a]],pl[lv[b]])) return [lv[a],lv[b]];
+      return null; };
+    const mkStep=(kind,w,f,just)=>{
+      const d=fRender(f), t=fTyped(f);
+      if(kind==='asm') return {kind, world:'', f, disp:'asm: '+d, typed:t, just:just||''};
+      return {kind, world:w||'', f, disp:(w?w+' ':'')+SYM.therefore+' '+d, typed:t, just};
+    };
+    /* every legal next line from the current live lines (engine-backed sets) */
+    function legalCandidates(){
+      const out=[]; if(!ENG) return out;
+      const lv=liveIdx(), modal=ENG.name==='modal', quant=ENG.name==='quant';
+      const liveHas=(w,f)=>lv.some(i=>(pl[i].w||'')===(w||'')&&pl[i].f&&fK(pl[i].f)===fK(f));
+      const add=(kind,w,f,just)=>{ if(kind!=='raa'&&kind!=='asm'&&liveHas(w,f)) return; out.push(mkStep(kind,w,f,just)); };
+      // S-rules (and reverse squiggles)
+      for(const i of lv){ const L=pl[i], f=L.f; if(!f) continue; let prods=[], mark='';
+        if(f.op==='&') prods=[f.a,f.b];
+        else if(f.op==='=') prods=[mkBin('>',f.a,f.b),mkBin('>',f.b,f.a)];
+        else if(f.op==='~'){ const g=f.a;
+          if(g.op==='~') prods=[g.a];
+          else if(g.op==='|') prods=[negS(g.a),negS(g.b)];
+          else if(g.op==='>') prods=[g.a,negS(g.b)];
+          else if(g.op==='=') prods=[mkBin('|',g.a,g.b),mkNeg(mkBin('&',g.a,g.b))];
+          else if(g.op==='all'){ prods=[EXf(g.v,negS(g.a))]; mark=' — reverse squiggle'; }
+          else if(g.op==='exists'){ prods=[ALL(g.v,negS(g.a))]; mark=' — reverse squiggle'; }
+          else if(g.op==='#'){ prods=[DIAf(negS(g.a))]; mark=' — reverse squiggle'; }
+          else if(g.op==='$'){ prods=[BOXf(negS(g.a))]; mark=' — reverse squiggle'; }
+        }
+        prods.forEach(q=>add('derive',L.w,q,`{from ${i+1}${mark}}`));
+      }
+      // I-rules (same world)
+      for(const i of lv){ const f=pl[i].f; if(!f) continue;
+        for(const j of lv){ if(j===i||(pl[j].w||'')!==(pl[i].w||'')||!pl[j].f) continue; const g=pl[j].f, k=fK(g), w=pl[i].w;
+          const J=`{from ${i+1} and ${j+1}}`;
+          if(f.op==='~'&&f.a.op==='&'){ if(k===fK(f.a.a)) add('derive',w,negS(f.a.b),J); if(k===fK(f.a.b)) add('derive',w,negS(f.a.a),J); }
+          else if(f.op==='|'){ if(k===fK(negS(f.a))) add('derive',w,f.b,J); if(k===fK(negS(f.b))) add('derive',w,f.a,J); }
+          else if(f.op==='>'){ if(k===fK(f.a)) add('derive',w,f.b,J); if(k===fK(negS(f.b))) add('derive',w,negS(f.a),J); }
+        }
+      }
+      if(quant){
+        const used=new Set(); pl.forEach(L=>{ if(L.f) constsOf(L.f,used); });
+        const fresh='abcdeghjkmnpqrstuvw'.split('').filter(c=>!used.has(c));
+        for(const i of lv){ const f=pl[i].f; if(!f) continue;
+          if(f.op==='exists') fresh.forEach(c=>add('derive','',substVar(f.a,f.v,c),`{from ${i+1} — drop existential, new constant ${c}}`));
+          if(f.op==='all'){ (used.size?[...used]:fresh.slice(0,1)).forEach(c=>add('derive','',substVar(f.a,f.v,c),`{from ${i+1} — drop universal, ${used.size?'old ':''}constant ${c}}`)); }
+          if(f.op==='id'&&f.a!==f.b) for(const j of lv){ if(j===i||!pl[j].f) continue;
+            for(const [x,y] of [[f.a,f.b],[f.b,f.a]]) if(constsOf(pl[j].f).has(x)){ const q=substConst(pl[j].f,x,y); if(fK(q)!==fK(pl[j].f)) add('derive','',q,`{from ${i+1} and ${j+1} — equals substitute}`); } }
+        }
+        used.forEach(c=>add('derive','',IDf(c,c),`{self-identity}`));
+      }
+      if(modal){
+        const ws=uniqStrings(pl.map(L=>L.w||''));
+        let nw='W'; while(ws.includes(nw)) nw+='W';
+        for(const i of lv){ const f=pl[i].f; if(!f) continue;
+          if(f.op==='$') add('derive',nw,f.a,`{from ${i+1} — drop diamond, new world}`);
+          if(f.op==='#') ws.forEach(w2=>add('derive',w2,f.a,`{from ${i+1} — drop box}`));
+        }
+      }
+      // ASSUME: one side (or its negation) of an unbroken complex wff
+      if(!modal) for(const i of lv){ const f=pl[i].f; if(!f||pl[i].w) continue; let sides=null;
+        if(f.op==='|'||f.op==='>') sides=[f.a,f.b]; else if(f.op==='~'&&f.a.op==='&') sides=[f.a.a,f.a.b];
+        if(!sides) continue;
+        if(sides.some(x=>liveHas('',x)||liveHas('',negS(x)))) continue;
+        sides.forEach(x=>{ add('asm','',x,`{break ${i+1}}`); add('asm','',negS(x),`{break ${i+1}}`); });
+      }
+      // RAA: any two live lines contradict
+      const pr=contraPair(), ai=openAsm();
+      if(pr&&ai>=0&&pl[ai].f) add('raa','',negS(pl[ai].f),`{from ${ai+1}; ${pr[0]+1} contradicts ${pr[1]+1}}`);
+      return out;
+    }
+    /* re-plan the rest of the proof from the lines actually on the page */
+    function replan(){
+      if(!ENG) return null;
+      const init=pl.map(L=>({f:L.f, w:L.w, asm:L.asm, blocked:L.blocked}));
+      if(init.some(L=>!L.f)) return null;
+      try{
+        const r= ENG.name==='prop' ? provePropositional(ENG.prems,ENG.concl,init)
+               : ENG.name==='quant' ? proveQuant(ENG.prems,ENG.concl,ENG.opts,init)
+               : proveModal(ENG.prems,ENG.concl,init);
+        return r&&r.steps ? r.steps : null;
+      }catch(e){ return null; }
+    }
     const starLine=(n)=>{ const L=shown.find(x=>x.no===n); if(L) L.star=true; };
     const renderLine=(L)=>{
       if(L.raw) return `<div class="pl">${L.body}</div>`;
@@ -3471,8 +3659,9 @@ function proofPlayer(cfg){
     const NEW_THING=/drop existential|drop diamond/;
     const NEEDS_OLD=/drop universal|drop box|equals substitute|self-identity/;
     function eligibleSteps(){
-      const out=[idx]; const cur=S.steps[idx];
-      if(!cur||cur.kind!=='derive') return out;
+      const cur=S.steps[idx]; if(!cur) return [];
+      const out=[idx];
+      if(cur.kind!=='derive') return out;
       let end=idx; while(end<S.steps.length&&S.steps[end].kind==='derive') end++;
       for(let j=idx+1;j<end;j++){
         const s2=S.steps[j];
@@ -3496,12 +3685,12 @@ function proofPlayer(cfg){
     /* typed justifications (Options: proof justifications typed by student) */
     const needJust=(st)=> !autoJust && (st.kind==='derive'||st.kind==='raa') && /\d/.test(st.just||'');
     const numSet=(t)=>[...new Set((String(t).match(/\d+/g)||[]).map(Number))].sort((a,b)=>a-b).join(',');
-    const justOk=(typed,st)=> numSet(typed)!=='' && numSet(typed)===numSet(st.just);
+    const justOk=(typed,st)=> numSet(typed)!=='' && (st.alts||[st.just]).some(j=>numSet(typed)===numSet(j));
     let jtries=0;
     const justHtml=(st)=> needJust(st) ? `<div class="answerbox" style="margin-top:8px"><input class="ans" id="jInput" autocomplete="off" spellcheck="false" placeholder='justification, e.g. "from 1 and 2"'></div>` : '';
     const draw=()=>{
-      const done=idx>=S.steps.length;
-      twSrc = (twStage()>0 && !done) ? twInfo(S.steps[idx]).lines : new Set();
+      const done=idx>=S.steps.length && !noPlan;
+      twSrc = (twStage()>0 && !done && S.steps[idx]) ? twInfo(S.steps[idx]).lines : new Set();
       const linesEl=root.querySelector('#prfLines');
       linesEl.innerHTML=shown.map(renderLine).join('');
       if(starMode==='self') linesEl.onclick=(e)=>{
@@ -3515,7 +3704,8 @@ function proofPlayer(cfg){
     };
     const applyStep=(st)=>{
       if(st.kind==='refute'){ shown.push({raw:true, body:st.ref}); return; }
-      if(st.kind==='raa') depth=Math.max(0,depth-1);
+      if(st.kind==='raa'){ depth=Math.max(0,depth-1); const ai=openAsm(); if(ai>=0) for(let k=ai;k<pl.length;k++) pl[k].blocked=true; }
+      pl.push({f:st.f||null, w:st.world||'', asm:st.kind==='asm', blocked:false, c:canonRaw(st.typed||'')});
       lineN++;
       const ind='&nbsp;&nbsp;'.repeat(depth);
       shown.push({no:lineN, body:`${ind}${st.kind==='asm'?'┌ ':''}${st.disp}`, jt:st.just||'', star:false});
@@ -3596,8 +3786,54 @@ function proofPlayer(cfg){
       if(session.points>=100) completeSet();
     };
     const advance=()=>{
-      applyStep(S.steps[idx]); idx++; tries=0; jtries=0; draw();
-      if(idx>=S.steps.length) finish();
+      const st=S.steps[idx];
+      applyStep(st); idx++; tries=0; jtries=0;
+      if(st.kind==='raa' && openAsmCount()===0){ S.steps.length=idx; noPlan=false; }   // first assumption closed: proof done
+      else if(S._replan){ S._replan=false; const r=replan();
+        if(r){ S.steps=S.steps.slice(0,idx).concat(r); noPlan=false; } else { S.steps=S.steps.slice(0,idx); noPlan=true; } }
+      draw();
+      if(idx>=S.steps.length && !noPlan) finish();
+    };
+    /* resolve a typed (or chosen) line: the scripted step, an out-of-order
+       scripted step, or any other legal line. Returns true if accepted. */
+    const parseTyped=(v)=>{
+      v=String(v).trim().replace(/^([DWUu]+)\s*∴\s*/,'$1: ');
+      const m=v.match(/^asm[:.]?\s*(.*)$/i);
+      const body=m?m[1]:v.replace(/^[∴:.\s]+/,'');
+      const wm=body.match(/^([DWU]+|u)\s*[:.]\s*(.*)$/i);
+      return {asm:!!m, body, world:wm?wm[1].toUpperCase():'', wff:wm?wm[2]:body};
+    };
+    const candMatches=(c,t)=>{
+      if((c.kind==='asm')!==t.asm) return false;
+      const wantW=(c.world||'').toUpperCase().replace(/[^A-Z]/g,''), wantF=canonP(c.typed);
+      return (t.world===wantW && canonP(t.wff)===wantF) || (wantW==='' && canonP(t.body)===wantF);
+    };
+    function legalStep(v){
+      if(/^refute$/i.test(String(v).trim())){
+        const r=replan();
+        if(r&&r.length&&r[0].kind==='refute') return {st:r[0], refute:true};
+        return null;
+      }
+      const t=parseTyped(v);
+      const cands=legalCandidates().filter(c=>candMatches(c,t));
+      if(cands.length){ const st=Object.assign({},cands[0]); st.alts=cands.map(c=>c.just); return {st}; }
+      // hand-written scripts (no engine): early RAA once two live lines contradict
+      if(!ENG && !t.asm && openAsmCount()===1 && contraPair()){
+        const k=S.steps.findIndex((x,ii)=>ii>=idx&&x.kind==='raa');
+        if(k>=0 && k===S.steps.length-1){ const r=S.steps[k];
+          if(!(r.world||'') && canonP(t.body)===canonP(r.typed)){
+            const pr=contraPair(), ai=openAsm();
+            return {st:Object.assign({},r,{just:`{from ${ai+1}; ${pr[0]+1} contradicts ${pr[1]+1}}`}), cut:true};
+          }
+        }
+      }
+      return null;
+    }
+    const acceptLegal=(res)=>{
+      if(res.cut){ S.steps=S.steps.slice(0,idx).concat([res.st]); }
+      else if(res.refute){ S.steps=S.steps.slice(0,idx).concat([res.st]); }
+      else { S.steps=S.steps.slice(0,idx).concat([res.st]); S._replan=true; }
+      right();
     };
     const right=()=>{
       const st0=S.steps[idx];
@@ -3625,7 +3861,8 @@ function proofPlayer(cfg){
       if(state.level>0) session.points=Math.max(0,session.points-pointsForWrong());
       beep('bad'); updateScoreBar();
       const fb=$('fb'); fb.className='feedback no show';
-      if(tries===1) fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${state.level>0?` (−${pointsForWrong()})`:''} ${hintForStep(S.steps[idx])}`;
+      if(noPlan||!S.steps[idx]) fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${state.level>0?` (−${pointsForWrong()})`:''} That line doesn't follow by the rules from the not-blocked-off lines.`;
+      else if(tries===1) fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${state.level>0?` (−${pointsForWrong()})`:''} ${hintForStep(S.steps[idx])}`;
       else { fb.innerHTML=`❌ The next line is: <b class="wff">${revealTxt}</b> (added for you, no further penalty).`; advance(); }
     };
     const hintForStep=(st)=>{
@@ -3647,7 +3884,7 @@ function proofPlayer(cfg){
       return uniqStrings(pool).filter(x=>x!==stepAnswerText(st));
     }
     function buildControls(){
-      const st=S.steps[idx];
+      const st=S.steps[idx]||{kind:'derive', typed:'', disp:'', just:''};
       const ctl=root.querySelector('#prfCtl');
       const stg=twStage();
       const twHtml = stg===2 ? `<div class="feedback info show" style="display:block;margin:8px 0">🛞 ${twInfo(st).text}</div>`
@@ -3658,7 +3895,7 @@ function proofPlayer(cfg){
           <input class="ans" id="ansInput" autocomplete="off" autocapitalize="off" spellcheck="false"
             placeholder='${st.kind==='refute'?'type REFUTE':(idx===0?'asm: …':'next line (or ASM: … / REFUTE)')}'>
           <button class="primary" id="prfGo">Enter</button></div>${justHtml(st)}${state.keyboard?keyboardHtml():''}</div>
-          <div class="rowbtns"><button class="hintbtn" id="prfGet">Get answer (−${Math.max(1,state.level)})</button></div>`;
+          <div class="rowbtns"${noPlan?' hidden':''}><button class="hintbtn" id="prfGet">Get answer (−${Math.max(1,state.level)})</button></div>`;
         const inp=ctl.querySelector('#ansInput'); inp.focus();
         const matchOne=(st,v)=>{
           let ok=false;
@@ -3671,16 +3908,18 @@ function proofPlayer(cfg){
             const worldTyped=wm?wm[1].toUpperCase():'';
             const wffTyped=wm?wm[2]:body;
             const want=(st.world||'');
-            const wantW=want.toUpperCase().replace(/[^A-Z]/g,''), wantF=canonWff(stepTyped(st));
+            const wantW=want.toUpperCase().replace(/[^A-Z]/g,''), wantF=canonP(stepTyped(st));
             // "u:A" may be a world prefix or belief notation, so try both readings
-            ok = prefOk && ((worldTyped===wantW && canonWff(wffTyped)===wantF) || (wantW==='' && canonWff(body)===wantF));
+            ok = prefOk && ((worldTyped===wantW && canonP(wffTyped)===wantF) || (wantW==='' && canonP(body)===wantF));
           }
           return ok;
         };
         const submit=()=>{
           const v=inp.value.trim(); if(!v) return;
           const j=eligibleSteps().find(k=>matchOne(S.steps[k],v));
-          if(j!==undefined){ promote(j); right(); }
+          if(j!==undefined){ promote(j); right(); return; }
+          const res=legalStep(v);
+          if(res) acceptLegal(res);
           else wrong(stepAnswerText(st));
         };
         ctl.querySelector('#prfGo').onclick=submit;
@@ -3694,11 +3933,14 @@ function proofPlayer(cfg){
         const extra=elig.length>1 && Math.random()<0.5 ? [elig[1+Math.floor(Math.random()*(elig.length-1))]] : [];
         const okOpts=[{t:correct,ok:true,j:idx}].concat(extra.map(k=>({t:stepAnswerText(S.steps[k]),ok:true,j:k})));
         const opts=shuffle(okOpts.concat(shuffle(distractorsFor(st).filter(t=>!okTexts.includes(t))).slice(0,4-okOpts.length).map(t=>({t,ok:false}))));
+        // a "distractor" that is in fact a legal line now is accepted too
+        opts.forEach(o=>{ if(!o.ok){ const r=legalStep(o.t); if(r){ o.ok=true; o.legal=r; } } });
         ctl.innerHTML=`${twHtml}<div class="instr" style="margin-top:8px">What's next${state.name?', '+esc(state.name):''}?</div>
-          ${justHtml(st)}<div class="choices">${opts.map((o,i)=>`<button class="choice" data-ok="${o.ok?1:0}" data-j="${o.ok?o.j:''}"><span class="num">${i+1}</span><span class="txt">${o.t}</span></button>`).join('')}</div>
+          ${justHtml(st)}<div class="choices">${opts.map((o,i)=>`<button class="choice" data-ok="${o.ok?1:0}" data-i="${i}" data-j="${o.ok&&!o.legal?o.j:''}"><span class="num">${i+1}</span><span class="txt">${o.t}</span></button>`).join('')}</div>
           <div class="rowbtns"><button class="hintbtn" id="prfGet">Get answer (−${Math.max(1,state.level)})</button></div>`;
         ctl.querySelectorAll('.choice').forEach(b=>b.onclick=()=>{
-          if(b.dataset.ok==='1'){ b.classList.add('good'); promote(+b.dataset.j); right(); }
+          const o=opts[+b.dataset.i];
+          if(b.dataset.ok==='1'){ b.classList.add('good'); if(o&&o.legal) acceptLegal(o.legal); else { promote(+b.dataset.j); right(); } }
           else{ b.classList.add('bad'); wrong(correct); }
         });
         ctl.querySelector('#prfGet').onclick=()=>{ tlog('h'); if(state.level>0){ session.points=Math.max(0,session.points-Math.max(1,state.level)); updateScoreBar(); } advance(); };
@@ -3906,7 +4148,7 @@ function mountCopi(root, premAsts, conclAst, opts){
   inp.focus();
 }
 function launchCopiChecker(){
-  if((state.completed.G||0)<9){
+  if(!INSTRUCTOR && (state.completed.G||0)<9){
     openModal(`<button class="close" onclick="closeModal()">×</button>
       <h2>🔒 Proof Builder Tool</h2>
       <p>The Proof Builder unlocks once you master <b>Set G</b> at scoring level <b>9</b> — finish the set at level 9 and it's yours.</p>
@@ -4359,10 +4601,10 @@ function renderModel(m, prems, concl){
 /* ============================================================================
    THE PROVER — runs Gensler's strategy and emits a proofPlayer step-script.
    ========================================================================== */
-function proveQuant(prems, concl, opts){
+function proveQuant(prems, concl, opts, init){
   opts=opts||{};
   const CAP=opts.cap||45, MAXC=opts.maxConsts||3, MAXDOM=opts.maxDom||3;
-  const lines=prems.map(f=>({f,asm:false,blocked:false}));
+  const lines=init ? init.map(L=>({f:L.f,asm:!!L.asm,blocked:!!L.blocked})) : prems.map(f=>({f,asm:false,blocked:false}));
   const steps=[];
   const live=()=>lines.map((L,i)=>({L,i})).filter(x=>!x.L.blocked);
   const liveHas=f=>live().some(x=>qEq(x.L.f,f));
@@ -4372,8 +4614,10 @@ function proveQuant(prems, concl, opts){
   const CPOOL=['a','b','c','d','e','g','h','j','k','m'];
   const newConst=()=>{ const used=new Set(allConsts()); return CPOOL.find(c=>!used.has(c)); };
 
-  const asm0=qNegS(concl);
-  push(asm0,true,psAsm(qRender(asm0),qRender(asm0),''));
+  if(!init){
+    const asm0=qNegS(concl);
+    push(asm0,true,psAsm(qRender(asm0),qRender(asm0),''));
+  } else if(!lines.some(L=>!L.blocked&&L.asm)) return {valid:true,steps};
 
   let guard=0;
   while(guard++<CAP){
@@ -4658,6 +4902,7 @@ function makeIScript(mode, wantValid){
     script.prem=cand.prem.map(qRender);
     script.premAst=cand.prem;
     script.concl=qRender(cand.concl);
+    script.eng={name:'quant', prems:cand.prem, concl:cand.concl, opts:cfg};
     script._raw={prem:cand.prem, concl:cand.concl, lvl};
     return {script, lvl};
   }
@@ -4668,6 +4913,7 @@ function makeIScript(mode, wantValid){
     : {prem:[ALL('x',IMP(PR(p,'x'),PR(q,'x'))), PR(p,'a')], concl:PR(q,'a')};
   const script=proveQuant(cand.prem, cand.concl, LVLCFG.easier);
   script.prem=cand.prem.map(qRender); script.premAst=cand.prem; script.concl=qRender(cand.concl);
+  script.eng={name:'quant', prems:cand.prem, concl:cand.concl, opts:LVLCFG.easier};
   script._raw={prem:cand.prem, concl:cand.concl, lvl:'easier'};
   return {script, lvl:'easier'};
 }
@@ -4959,7 +5205,7 @@ function mountQCopi(root, premAsts, conclAst, opts){
 /* ---- Predicate Proof Builder: ungraded tool, twin of the propositional one.
    Unlocks once Set I is mastered at level 9. ---- */
 function launchQuantChecker(){
-  if((state.completed.I||0)<9){
+  if(!INSTRUCTOR && (state.completed.I||0)<9){
     openModal(`<button class="close" onclick="closeModal()">×</button>
       <h2>🔒 Predicate Proof Builder</h2>
       <p>The Predicate Proof Builder unlocks once you master <b>Set I</b> at scoring level <b>9</b> — finish the set at level 9 and it's yours.</p>
@@ -5134,7 +5380,7 @@ function mountMCopi(root, premAsts, conclAst, opts){
   inp.focus();
 }
 function launchModalChecker(){
-  if((state.completed.K||0)<9){
+  if(!INSTRUCTOR && (state.completed.K||0)<9){
     openModal(`<button class="close" onclick="closeModal()">×</button>
       <h2>🔒 Modal Proof Builder</h2>
       <p>The Modal Proof Builder unlocks once you master <b>Set K</b> at scoring level <b>9</b> — finish the set at level 9 and it's yours.</p>
@@ -5376,15 +5622,18 @@ function mDegen(f){
 }
 /* Gensler-strategy S5 prover (single assumption; problems needing further
    assumptions are skipped by the generator) */
-function proveModal(prems, concl){
-  const lines=prems.map(f=>({w:'',f}));
+function proveModal(prems, concl, init){
   const steps=[];
+  if(init && init.some(L=>L.blocked)) return {valid:true,steps};   // already closed by RAA
+  const lines=init ? init.map(L=>({w:L.w||'',f:L.f})) : prems.map(f=>({w:'',f}));
   const push=(w,f,step)=>{ step.f=f; lines.push({w,f}); steps.push(step); };
   const has=(w,f)=>lines.some(L=>L.w===w&&qEq(L.f,f));
   const lineNo=i=>i+1;
   const worlds=()=>uniqStrings(lines.map(L=>L.w));
-  const asm0=qNegS(concl);
-  push('',asm0,psAsm(qRender(asm0),qRender(asm0),''));
+  let asmAt=prems.length+1;
+  if(init){ const k=init.findIndex(L=>L.asm); asmAt=k+1; }
+  else { const asm0=qNegS(concl); push('',asm0,psAsm(qRender(asm0),qRender(asm0),'')); }
+  const asm0=lines[asmAt-1].f;
   let guard=0;
   while(guard++<48){
     /* RAA — a contradiction inside one world */
@@ -5393,7 +5642,7 @@ function proveModal(prems, concl){
       if(lines[i].w===lines[j].w && qContra(lines[i].f,lines[j].f)){ pair=[i,j]; break outer; }
     if(pair){
       const der=qNegS(asm0);
-      push('',der,psRaa('',qRender(der),qRender(der),`{from ${prems.length+1}; ${lineNo(pair[0])} contradicts ${lineNo(pair[1])}}`));
+      push('',der,psRaa('',qRender(der),qRender(der),`{from ${asmAt}; ${lineNo(pair[0])} contradicts ${lineNo(pair[1])}}`));
       return {valid:true,steps};
     }
     let did=false;
@@ -5512,6 +5761,7 @@ function genKArg(hard, wantValid){
     script.prem=prems.map(qRender);
     script.premAst=prems;
     script.concl=qRender(concl);
+    script.eng={name:'modal', prems, concl};
     return script;
   }
   return null;
@@ -8431,7 +8681,7 @@ const NC_ACCENT = typeof DEVIANT_ACCENT!=='undefined' ? DEVIANT_ACCENT : '#a78bf
 const NC = { logic:'free', mode:'check', prem:'', concl:'' }; // session UI state
 
 function ncGate(){
-  if((state.completed.I||0)<9){
+  if(!INSTRUCTOR && (state.completed.I||0)<9){
     openModal(`<button class="close" onclick="closeModal()">×</button>
       <h2>🔒 Non-Classical Workbench</h2>
       <p>This workbench unlocks once you master <b>Set I</b> (Quantificational Proofs) at scoring level <b>9</b>.</p>
@@ -9440,7 +9690,7 @@ function fileMenu(){
       <span class="id">Set ${id}</span><span class="nm">${s.name}</span>
       <span class="ch">${s.chapter}${done?` · <span class="badge">✓ Mastered · level ${done}</span>`:''}</span></button>`;
   };
-  const toolUnlocked=(state.completed.G||0)>=9;
+  const toolUnlocked=INSTRUCTOR||(state.completed.G||0)>=9;
   const toolBtn= toolUnlocked
     ? `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;background:linear-gradient(160deg,rgba(45,212,191,0.16),rgba(45,212,191,0.05))" onclick="closeModal();launchCopiChecker()">
       <span class="id" style="color:#2dd4bf">🛠 Tool</span><span class="nm">Propositional Proof Builder</span>
@@ -9448,7 +9698,7 @@ function fileMenu(){
     : `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;opacity:.45;cursor:not-allowed" title="Master Set G at level 9 to unlock" onclick="event.preventDefault()">
       <span class="id" style="color:#2dd4bf">🔒 Tool</span><span class="nm">Propositional Proof Builder</span>
       <span class="ch">Unlocks when you master Set G at level 9</span></button>`;
-  const qtoolUnlocked=(state.completed.I||0)>=9;
+  const qtoolUnlocked=INSTRUCTOR||(state.completed.I||0)>=9;
   const qtoolBtn= qtoolUnlocked
     ? `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;background:linear-gradient(160deg,rgba(45,212,191,0.16),rgba(45,212,191,0.05))" onclick="closeModal();launchQuantChecker()">
       <span class="id" style="color:#2dd4bf">🛠 Tool</span><span class="nm">Quantificational Proof Builder</span>
@@ -9456,7 +9706,7 @@ function fileMenu(){
     : `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;opacity:.45;cursor:not-allowed" title="Master Set I at level 9 to unlock" onclick="event.preventDefault()">
       <span class="id" style="color:#2dd4bf">🔒 Tool</span><span class="nm">Quantificational Proof Builder</span>
       <span class="ch">Unlocks when you master Set I at level 9</span></button>`;
-  const ktoolUnlocked=(state.completed.K||0)>=9;
+  const ktoolUnlocked=INSTRUCTOR||(state.completed.K||0)>=9;
   const ktoolBtn= ktoolUnlocked
     ? `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;background:linear-gradient(160deg,rgba(45,212,191,0.16),rgba(45,212,191,0.05))" onclick="closeModal();launchModalChecker()">
       <span class="id" style="color:#2dd4bf">🛠 Tool</span><span class="nm">Modal Proof Builder</span>
@@ -9469,7 +9719,7 @@ function fileMenu(){
      <div class="grid">${ids.filter(id=>SETS[id]).map(btn).join('')}</div>`;
   const groups   = SET_GROUPS.filter(g=>g[0]!=='Sets and Metatheory').map(gHtml).join('');
   const smIds = (SET_GROUPS.find(g=>g[0]==='Sets and Metatheory')||[,,[]])[2]||[];
-  const dUnlocked=(state.completed.I||0)>=9;
+  const dUnlocked=INSTRUCTOR||(state.completed.I||0)>=9;
   const deviantOne = dUnlocked
     ? `<button type="button" class="setbtn tool" style="border-color:#a78bfa;background:linear-gradient(160deg,rgba(167,139,250,0.16),rgba(167,139,250,0.05))" onclick="closeModal();launchDeviant()"><span class="id" style="color:#a78bfa">◆ Tool</span><span class="nm">Non-Classical Workbench</span><span class="ch">Free · intuitionistic · medieval term logic — validity checker &amp; proof builder · ungraded</span></button>`
     : `<button type="button" class="setbtn tool" style="border-color:#a78bfa;opacity:.45;cursor:not-allowed" title="Master Set I at level 9 to unlock" onclick="event.preventDefault()"><span class="id" style="color:#a78bfa">🔒 Tool</span><span class="nm">Non-Classical Workbench</span><span class="ch">Unlocks when you master Set I at level 9</span></button>`;
@@ -9923,7 +10173,7 @@ function renderProblem(){
     html+=`</div>`;
   }
   html+=`<div class="instr">${p.instr}</div>`;
-  html+=`<div class="feedback" id="fb"></div>`;
+  html+=`<div class="feedback" id="fb" role="status" aria-live="polite"></div>`;
   html+=`<div class="rowbtns">
      <button class="hintbtn" onclick="showAnswer()">Show answer</button>
      <button class="ghost" onclick="skipProblem()">Skip</button>
@@ -10083,12 +10333,42 @@ window.showAnswer=function(){
 };
 window.skipProblem=function(){ tlog('s'); nextProblem(); };
 
+/* Which activity / difficulty / system the student is doing right now, as the
+   set menu stores it. Recorded with each finished set (score files v4). */
+function doneSlot(id){
+  const M=MENU[id]||{};
+  let act=M.key?(state[M.key]||''):'';
+  if(id==='G') act=state.gMode||'both';
+  if(id==='I') act=state.iKind||'both';
+  if(id==='K') act=state.kMode||'both';
+  let diff='';
+  if(id==='G') diff=state.gLevel||'easier';
+  else if(id==='I') diff=state.iMode||'easier';
+  else if(id==='K') diff=['valid','invalid','both'].includes(act)?(state.kLevel||'easier'):(act==='galactic'?(state.modalSystem||'S5'):'');
+  else if(M.diffKey) diff=state[M.diffKey]||'easier';
+  else if(M.diff) diff=state.harder?'harder':'easier';
+  let sys='';
+  if(id==='B') sys=state.bImport==='traditional'?'traditional':'modern';
+  if(id==='K'&&act==='galactic') sys=state.modalSystem||'S5';
+  const typed=(id==='G'&&['valid','invalid','both'].includes(act)) || (!!M.type && !!state.type);
+  return {act:act||'-', diff:diff||'-', sys, ans:typed?'typed':'MC'};
+}
+function todayStr(){ const d=new Date(), pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function recordDone(id,lvl){
+  const k=doneSlot(id), t=todayStr();
+  state.done=state.done||{};
+  const S=state.done[id]=state.done[id]||{}, A=S[k.act]=S[k.act]||{};
+  const r=A[k.diff]=A[k.diff]||{lv:0, first:t, last:t, n:0};
+  r.lv=Math.max(r.lv||0,lvl); r.last=t; r.n=(r.n||0)+1; r.ans=k.ans; if(k.sys) r.sys=k.sys;
+}
 function completeSet(){
   beep('win');
   const id=session.set; const lvl=state.level;
   const prev=state.completed[id]||0;
   tlog('F',{lv:lvl});
-  if(lvl>prev){ state.completed[id]=lvl; save(); }
+  recordDone(id,lvl);
+  if(lvl>prev) state.completed[id]=lvl;
+  save();
   openModal(`<div class="completeburst">🎉</div>
     <h2 style="text-align:center">Exercise Complete!</h2>
     <p style="text-align:center">You finished <b>Set ${id}: ${SETS[id].name}</b> at scoring level <b>${lvl}</b>.</p>
@@ -10115,13 +10395,13 @@ function scoresView(){
       <button class="ghost" onclick="document.getElementById('impFile').click()">Import</button>
       <button class="ghost" onclick="resetScores()">Reset all</button>
     </div>
-    <p class="muted" style="font-size:12px">Export creates a signed <b>.lgc</b> file you can send to your instructor. It contains only your name, your best level for each set, and which sets you have finished. Nothing else about your practice is recorded. Import restores a previously exported file, for example to move your record to another computer.</p>
+    <p class="muted" style="font-size:12px">Export creates a signed <b>.lgc</b> file you can send to your instructor. It contains only your name, your best level for each set, and, for each activity and difficulty you finished: your best level, the first and last dates, how many times, whether you typed or picked answers, and the logic system used. Nothing else about your practice is recorded. Import restores a previously exported file, for example to move your record to another computer.</p>
     <input type="file" id="impFile" style="display:none" accept=".lgc,.json,application/json,text/plain" onchange="importScores(event)">`);
 }
 function b64FromBytes(bytes){ let s=''; const CH=0x8000; for(let i=0;i<bytes.length;i+=CH) s+=String.fromCharCode.apply(null,bytes.subarray(i,Math.min(i+CH,bytes.length))); return btoa(s); }
 function bytesFromB64(b64){ const s=atob(b64); const u=new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
 window.exportScores=async function(){
-  const payload={v:3,name:state.name||'',completed:state.completed||{}};
+  const payload={v:4,name:state.name||'',completed:state.completed||{},done:cleanDone(state.done)};
   const raw=new TextEncoder().encode(JSON.stringify(payload));
   let flag='p', body;
   try{
@@ -10134,6 +10414,20 @@ window.exportScores=async function(){
   const who=(state.name||'me').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_')||'me';
   a.download=`logicola-${who}-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.lgc`; a.click();
 };
+/* done[set][activity][difficulty] = {lv, first, last, n, ans, sys} */
+function cleanDone(d){
+  const out={}, okKey=k=>/^[\w-]{1,24}$/.test(k), okDate=x=>/^\d{4}-\d\d-\d\d$/.test(x||'');
+  if(!d||typeof d!=='object') return out;
+  for(const id in d){ if(!SETS[id]||!d[id]||typeof d[id]!=='object') continue;
+    for(const a in d[id]){ if(!okKey(a)||!d[id][a]||typeof d[id][a]!=='object') continue;
+      for(const f in d[id][a]){ const r=d[id][a][f]; if(!okKey(f)||!r||typeof r!=='object') continue;
+        const lv=Math.min(9,Math.max(0,Math.round(+r.lv||0))), n=Math.max(1,Math.round(+r.n||1));
+        const rec={lv, first:okDate(r.first)?r.first:'', last:okDate(r.last)?r.last:'', n};
+        if(r.ans==='MC'||r.ans==='typed') rec.ans=r.ans;
+        if(typeof r.sys==='string'&&okKey(r.sys)) rec.sys=r.sys;
+        ((out[id]=out[id]||{})[a]=out[id][a]||{})[f]=rec; } } }
+  return out;
+}
 function cleanCompleted(c){
   const out={}; if(c && typeof c==='object') for(const k in c){ const n=+c[k]; if(SETS[k] && n>0) out[k]=Math.min(9,Math.round(n)); }
   return out;
@@ -10157,6 +10451,7 @@ window.importScores=function(ev){
         const d=JSON.parse(new TextDecoder().decode(bytes));
         if(d.name) state.name=d.name;
         state.completed=cleanCompleted(d.completed);   /* older files: any practice log in them is ignored */
+        state.done=cleanDone(d.done);
         save();
         updateScoreBar(); scoresView();
         if(!okMac) alert('Note: this file did not pass its integrity check (it may have been edited). It was imported anyway, but an instructor page would flag it.');
@@ -10165,13 +10460,14 @@ window.importScores=function(ev){
         if(!d || typeof d!=='object' || !d.completed) throw new Error('format');
         if(d.name) state.name=d.name;
         state.completed=cleanCompleted(d.completed);
+        state.done=cleanDone(d.done);
         save(); updateScoreBar(); scoresView();
       }
     }catch(e){ alert('Could not read that file. Choose a .lgc score file exported from LogiCola.'); }
   };
   r.readAsText(f);
 };
-window.resetScores=function(){ if(confirm('Erase all completion records?')){ state.completed={}; save(); scoresView(); } };
+window.resetScores=function(){ if(confirm('Erase all completion records?')){ state.completed={}; state.done={}; save(); scoresView(); } };
 
 /* ---- titles + one-line "about" blurbs per set ---- */
 const SET_TITLES={

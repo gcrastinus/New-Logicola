@@ -2,7 +2,7 @@
 instructor edition unlocks; Quiz Maker does not trip the single-instance lock."""
 import sys
 from playwright.sync_api import sync_playwright
-B='http://localhost:8766/'; res=[]
+B=(sys.argv[1] if len(sys.argv)>1 else 'http://localhost:8766/'); res=[]
 def check(n,c): res.append(bool(c)); print('PASS' if c else 'FAIL', n)
 with sync_playwright() as p:
     b=p.chromium.launch(); ctx=b.new_context()

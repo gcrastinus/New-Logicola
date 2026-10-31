@@ -2,7 +2,7 @@
 and the instructor report shows them (plus older-format v3 files)."""
 import json, os, sys
 from playwright.sync_api import sync_playwright
-BASE='http://localhost:8766/'
+BASE=sys.argv[1] if len(sys.argv)>1 else 'http://localhost:8766/'
 SHOTS='/workspace/logicola-work-shots'
 res=[]
 def check(name,cond):
@@ -49,7 +49,7 @@ with sync_playwright() as p:
     for w,h in [(1280,900),(390,844)]:
         rp=ctx.new_page(); rp.set_viewport_size({'width':w,'height':h}); rerr=[]
         rp.on('pageerror',lambda e:rerr.append(str(e)))
-        rp.goto(BASE+'instructor.html')
+        rp.goto(BASE+'logiskor.html')
         rp.set_input_files('#fileIn',[path,'/workspace/logicola-audit/sample.lgc']); rp.wait_for_timeout(800)
         body=rp.inner_text('#results')
         check(f'{w}: two students listed', 'Test, Student' in body and body.count('verified')>=1)

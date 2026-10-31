@@ -415,7 +415,7 @@ function tokenize(s){
     if(ch===' ') continue;
     if('∼~¬!'.includes(ch)) t.push('~');
     else if('•&∧'.includes(ch)) t.push('&');
-    else if('∨'.includes(ch)) t.push('|');
+    else if('∨'.includes(ch) || ch==='v') t.push('|');   // typed "v" means "or", as in Gensler's LogiCola
     else if('⊃→>'.includes(ch)) t.push('>');
     else if('≡↔'.includes(ch)) t.push('=');
     else if(ch==='(') t.push('(');
@@ -427,12 +427,21 @@ function tokenize(s){
 // Canonicalize a wff string for notation-agnostic answer comparison: maps every
 // accepted symbol variant to one internal form and normalizes quantifier styles,
 // so a student may answer in (x)-style or ∀-style, with & or •, → or ⊃, etc.
-function canonWff(s){
+function canonWff(s,mode){
   let x=String(s).replace(/\s+/g,'');
   x=x.replace(/[∼~¬!]/g,'~').replace(/[•&∧]/g,'&').replace(/[∨]/g,'v')
      .replace(/[⊃→>]/g,'>').replace(/[≡↔]/g,'=');
   x=x.replace(/\(∃([a-z])\)/g,'E$1').replace(/∃([a-z])/g,'E$1'); // existential -> E<var>
   x=x.replace(/∀([a-z])/g,'@$1').replace(/\(([a-z])\)/g,'@$1');  // universal   -> @<var>
+  if(mode==='proof') x=stripOuterParens(x);   // proof lines: "AvB" and "(AvB)" are the same answer
+  return x;
+}
+function stripOuterParens(x){
+  while(x.length>1 && x[0]==='(' && x[x.length-1]===')'){
+    let d=0, wraps=true;
+    for(let i=0;i<x.length;i++){ if(x[i]==='(') d++; else if(x[i]===')'){ d--; if(d===0&&i<x.length-1){ wraps=false; break; } } }
+    if(!wraps) break; x=x.slice(1,-1);
+  }
   return x;
 }
 // Recursive-descent parser with precedence ~ > & > | > (> , =)
@@ -2280,16 +2289,20 @@ function randAst(letters,depth){
   return Math.random()<0.28?mkNeg(f):f;
 }
 /* Run the mechanical strategy; returns a step script, or null if it stalls. */
-function provePropositional(prems, concl){
-  const lines=prems.map(f=>({f,asm:false,blocked:false}));
+function provePropositional(prems, concl, init){
+  /* init (optional): the proof so far, as [{f,asm,blocked}] with premises first.
+     Used to re-plan the rest of the proof after a student's own legal step. */
+  const lines=init ? init.map(L=>({f:L.f,asm:!!L.asm,blocked:!!L.blocked})) : prems.map(f=>({f,asm:false,blocked:false}));
   const steps=[];
   const live=()=>lines.map((L,i)=>({L,i})).filter(x=>!x.L.blocked);
   const liveHas=f=>live().some(x=>astEq(x.L.f,f));
   const lineNo=i=>i+1;
   const push=(f,asm,step)=>{ lines.push({f,asm,blocked:false}); steps.push(step); };
   // START: assume the conclusion's simpler contradictory
-  const asm0=astNegS(concl);
-  push(asm0,true,{kind:'asm', f:asm0, disp:'asm: '+astRender(asm0), typed:astStr(asm0), just:''});
+  if(!init){
+    const asm0=astNegS(concl);
+    push(asm0,true,{kind:'asm', f:asm0, disp:'asm: '+astRender(asm0), typed:astStr(asm0), just:''});
+  } else if(!lines.some(L=>!L.blocked&&L.asm)) return {valid:true, steps};
   let guard=0;
   while(guard++<300){
     // RAA?
@@ -2462,6 +2475,7 @@ function genGArg(hard, wantValid){
     script.prem=prems.map(astRender);
     script.premAst=prems;
     script.concl=astRender(concl);
+    script.eng={name:'prop', prems, concl};
     return script;
   }
   return null;
@@ -2501,6 +2515,115 @@ function proofPlayer(cfg){
     const shown=[];                          // {no, body, jt, star, raw}
     S.prem.forEach((q,i)=>shown.push({no:i+1, body:q, jt:'', star:false}));
     shown.push({no:'', body:`[${SYM.therefore} ${S.concl}`, jt:'', star:false});
+    /* ---- LEGALITY CHECKING (any legal Gensler proof is accepted) ----
+       pl mirrors the numbered lines: {f (AST, when the engine supplied one),
+       w (world prefix), asm, blocked, c (canonical text)}. A student's line is
+       accepted if it is the scripted next step, OR a legal S-/I-rule (or
+       quantifier/modal) step from live lines, OR an assumption that breaks an
+       unbroken wff, OR RAA once any two live lines contradict. After an
+       off-script step the rest of the proof (hints, "Get answer") is re-planned
+       from the lines actually on the page. REFUTE still needs full breakdown. */
+    const ENG=S.eng||null;
+    const stripTags=t=>String(t).replace(/<[^>]*>/g,'').replace(/&nbsp;/g,' ');
+    const canonRaw=t=>canonWff(stripTags(t));
+    const canonP=t=>canonWff(t,'proof');
+    const pl=(S.premAst&&S.premAst.length===premCount?S.premAst:S.prem.map(()=>null))
+      .map((f,i)=>({f, w:'', asm:false, blocked:false, c:canonRaw(S.prem[i])}));
+    let noPlan=false;
+    const fK=f=>qStr(f);
+    const fRender=f=> ENG&&ENG.name==='prop' ? astRender(f) : qRender(f);
+    const fTyped=f=> ENG&&ENG.name==='prop' ? astStr(f) : qRender(f);
+    const negS=f=> f.op==='~' ? f.a : mkNeg(f);
+    const isContra=(A,B)=>{
+      if((A.w||'')!==(B.w||'')) return false;
+      if(A.f&&B.f){ const x=fK(A.f), y=fK(B.f); return x==='~'+y||y==='~'+x; }
+      return A.c==='~'+B.c || B.c==='~'+A.c;
+    };
+    const liveIdx=()=>pl.map((L,i)=>i).filter(i=>!pl[i].blocked);
+    const openAsm=()=>{ for(let i=pl.length-1;i>=0;i--) if(!pl[i].blocked&&pl[i].asm) return i; return -1; };
+    const openAsmCount=()=>pl.filter(L=>!L.blocked&&L.asm).length;
+    const contraPair=()=>{ const lv=liveIdx();
+      for(let a=0;a<lv.length;a++) for(let b=a+1;b<lv.length;b++) if(isContra(pl[lv[a]],pl[lv[b]])) return [lv[a],lv[b]];
+      return null; };
+    const mkStep=(kind,w,f,just)=>{
+      const d=fRender(f), t=fTyped(f);
+      if(kind==='asm') return {kind, world:'', f, disp:'asm: '+d, typed:t, just:just||''};
+      return {kind, world:w||'', f, disp:(w?w+' ':'')+SYM.therefore+' '+d, typed:t, just};
+    };
+    /* every legal next line from the current live lines (engine-backed sets) */
+    function legalCandidates(){
+      const out=[]; if(!ENG) return out;
+      const lv=liveIdx(), modal=ENG.name==='modal', quant=ENG.name==='quant';
+      const liveHas=(w,f)=>lv.some(i=>(pl[i].w||'')===(w||'')&&pl[i].f&&fK(pl[i].f)===fK(f));
+      const add=(kind,w,f,just)=>{ if(kind!=='raa'&&kind!=='asm'&&liveHas(w,f)) return; out.push(mkStep(kind,w,f,just)); };
+      // S-rules (and reverse squiggles)
+      for(const i of lv){ const L=pl[i], f=L.f; if(!f) continue; let prods=[], mark='';
+        if(f.op==='&') prods=[f.a,f.b];
+        else if(f.op==='=') prods=[mkBin('>',f.a,f.b),mkBin('>',f.b,f.a)];
+        else if(f.op==='~'){ const g=f.a;
+          if(g.op==='~') prods=[g.a];
+          else if(g.op==='|') prods=[negS(g.a),negS(g.b)];
+          else if(g.op==='>') prods=[g.a,negS(g.b)];
+          else if(g.op==='=') prods=[mkBin('|',g.a,g.b),mkNeg(mkBin('&',g.a,g.b))];
+          else if(g.op==='all'){ prods=[EXf(g.v,negS(g.a))]; mark=' — reverse squiggle'; }
+          else if(g.op==='exists'){ prods=[ALL(g.v,negS(g.a))]; mark=' — reverse squiggle'; }
+          else if(g.op==='#'){ prods=[DIAf(negS(g.a))]; mark=' — reverse squiggle'; }
+          else if(g.op==='$'){ prods=[BOXf(negS(g.a))]; mark=' — reverse squiggle'; }
+        }
+        prods.forEach(q=>add('derive',L.w,q,`{from ${i+1}${mark}}`));
+      }
+      // I-rules (same world)
+      for(const i of lv){ const f=pl[i].f; if(!f) continue;
+        for(const j of lv){ if(j===i||(pl[j].w||'')!==(pl[i].w||'')||!pl[j].f) continue; const g=pl[j].f, k=fK(g), w=pl[i].w;
+          const J=`{from ${i+1} and ${j+1}}`;
+          if(f.op==='~'&&f.a.op==='&'){ if(k===fK(f.a.a)) add('derive',w,negS(f.a.b),J); if(k===fK(f.a.b)) add('derive',w,negS(f.a.a),J); }
+          else if(f.op==='|'){ if(k===fK(negS(f.a))) add('derive',w,f.b,J); if(k===fK(negS(f.b))) add('derive',w,f.a,J); }
+          else if(f.op==='>'){ if(k===fK(f.a)) add('derive',w,f.b,J); if(k===fK(negS(f.b))) add('derive',w,negS(f.a),J); }
+        }
+      }
+      if(quant){
+        const used=new Set(); pl.forEach(L=>{ if(L.f) constsOf(L.f,used); });
+        const fresh='abcdeghjkmnpqrstuvw'.split('').filter(c=>!used.has(c));
+        for(const i of lv){ const f=pl[i].f; if(!f) continue;
+          if(f.op==='exists') fresh.forEach(c=>add('derive','',substVar(f.a,f.v,c),`{from ${i+1} — drop existential, new constant ${c}}`));
+          if(f.op==='all'){ (used.size?[...used]:fresh.slice(0,1)).forEach(c=>add('derive','',substVar(f.a,f.v,c),`{from ${i+1} — drop universal, ${used.size?'old ':''}constant ${c}}`)); }
+          if(f.op==='id'&&f.a!==f.b) for(const j of lv){ if(j===i||!pl[j].f) continue;
+            for(const [x,y] of [[f.a,f.b],[f.b,f.a]]) if(constsOf(pl[j].f).has(x)){ const q=substConst(pl[j].f,x,y); if(fK(q)!==fK(pl[j].f)) add('derive','',q,`{from ${i+1} and ${j+1} — equals substitute}`); } }
+        }
+        used.forEach(c=>add('derive','',IDf(c,c),`{self-identity}`));
+      }
+      if(modal){
+        const ws=uniqStrings(pl.map(L=>L.w||''));
+        let nw='W'; while(ws.includes(nw)) nw+='W';
+        for(const i of lv){ const f=pl[i].f; if(!f) continue;
+          if(f.op==='$') add('derive',nw,f.a,`{from ${i+1} — drop diamond, new world}`);
+          if(f.op==='#') ws.forEach(w2=>add('derive',w2,f.a,`{from ${i+1} — drop box}`));
+        }
+      }
+      // ASSUME: one side (or its negation) of an unbroken complex wff
+      if(!modal) for(const i of lv){ const f=pl[i].f; if(!f||pl[i].w) continue; let sides=null;
+        if(f.op==='|'||f.op==='>') sides=[f.a,f.b]; else if(f.op==='~'&&f.a.op==='&') sides=[f.a.a,f.a.b];
+        if(!sides) continue;
+        if(sides.some(x=>liveHas('',x)||liveHas('',negS(x)))) continue;
+        sides.forEach(x=>{ add('asm','',x,`{break ${i+1}}`); add('asm','',negS(x),`{break ${i+1}}`); });
+      }
+      // RAA: any two live lines contradict
+      const pr=contraPair(), ai=openAsm();
+      if(pr&&ai>=0&&pl[ai].f) add('raa','',negS(pl[ai].f),`{from ${ai+1}; ${pr[0]+1} contradicts ${pr[1]+1}}`);
+      return out;
+    }
+    /* re-plan the rest of the proof from the lines actually on the page */
+    function replan(){
+      if(!ENG) return null;
+      const init=pl.map(L=>({f:L.f, w:L.w, asm:L.asm, blocked:L.blocked}));
+      if(init.some(L=>!L.f)) return null;
+      try{
+        const r= ENG.name==='prop' ? provePropositional(ENG.prems,ENG.concl,init)
+               : ENG.name==='quant' ? proveQuant(ENG.prems,ENG.concl,ENG.opts,init)
+               : proveModal(ENG.prems,ENG.concl,init);
+        return r&&r.steps ? r.steps : null;
+      }catch(e){ return null; }
+    }
     const starLine=(n)=>{ const L=shown.find(x=>x.no===n); if(L) L.star=true; };
     const renderLine=(L)=>{
       if(L.raw) return `<div class="pl">${L.body}</div>`;
@@ -2518,8 +2641,9 @@ function proofPlayer(cfg){
     const NEW_THING=/drop existential|drop diamond/;
     const NEEDS_OLD=/drop universal|drop box|equals substitute|self-identity/;
     function eligibleSteps(){
-      const out=[idx]; const cur=S.steps[idx];
-      if(!cur||cur.kind!=='derive') return out;
+      const cur=S.steps[idx]; if(!cur) return [];
+      const out=[idx];
+      if(cur.kind!=='derive') return out;
       let end=idx; while(end<S.steps.length&&S.steps[end].kind==='derive') end++;
       for(let j=idx+1;j<end;j++){
         const s2=S.steps[j];
@@ -2543,12 +2667,12 @@ function proofPlayer(cfg){
     /* typed justifications (Options: proof justifications typed by student) */
     const needJust=(st)=> !autoJust && (st.kind==='derive'||st.kind==='raa') && /\d/.test(st.just||'');
     const numSet=(t)=>[...new Set((String(t).match(/\d+/g)||[]).map(Number))].sort((a,b)=>a-b).join(',');
-    const justOk=(typed,st)=> numSet(typed)!=='' && numSet(typed)===numSet(st.just);
+    const justOk=(typed,st)=> numSet(typed)!=='' && (st.alts||[st.just]).some(j=>numSet(typed)===numSet(j));
     let jtries=0;
     const justHtml=(st)=> needJust(st) ? `<div class="answerbox" style="margin-top:8px"><input class="ans" id="jInput" autocomplete="off" spellcheck="false" placeholder='justification, e.g. "from 1 and 2"'></div>` : '';
     const draw=()=>{
-      const done=idx>=S.steps.length;
-      twSrc = (twStage()>0 && !done) ? twInfo(S.steps[idx]).lines : new Set();
+      const done=idx>=S.steps.length && !noPlan;
+      twSrc = (twStage()>0 && !done && S.steps[idx]) ? twInfo(S.steps[idx]).lines : new Set();
       const linesEl=root.querySelector('#prfLines');
       linesEl.innerHTML=shown.map(renderLine).join('');
       if(starMode==='self') linesEl.onclick=(e)=>{
@@ -2562,7 +2686,8 @@ function proofPlayer(cfg){
     };
     const applyStep=(st)=>{
       if(st.kind==='refute'){ shown.push({raw:true, body:st.ref}); return; }
-      if(st.kind==='raa') depth=Math.max(0,depth-1);
+      if(st.kind==='raa'){ depth=Math.max(0,depth-1); const ai=openAsm(); if(ai>=0) for(let k=ai;k<pl.length;k++) pl[k].blocked=true; }
+      pl.push({f:st.f||null, w:st.world||'', asm:st.kind==='asm', blocked:false, c:canonRaw(st.typed||'')});
       lineN++;
       const ind='&nbsp;&nbsp;'.repeat(depth);
       shown.push({no:lineN, body:`${ind}${st.kind==='asm'?'┌ ':''}${st.disp}`, jt:st.just||'', star:false});
@@ -2643,8 +2768,54 @@ function proofPlayer(cfg){
       if(session.points>=100) completeSet();
     };
     const advance=()=>{
-      applyStep(S.steps[idx]); idx++; tries=0; jtries=0; draw();
-      if(idx>=S.steps.length) finish();
+      const st=S.steps[idx];
+      applyStep(st); idx++; tries=0; jtries=0;
+      if(st.kind==='raa' && openAsmCount()===0){ S.steps.length=idx; noPlan=false; }   // first assumption closed: proof done
+      else if(S._replan){ S._replan=false; const r=replan();
+        if(r){ S.steps=S.steps.slice(0,idx).concat(r); noPlan=false; } else { S.steps=S.steps.slice(0,idx); noPlan=true; } }
+      draw();
+      if(idx>=S.steps.length && !noPlan) finish();
+    };
+    /* resolve a typed (or chosen) line: the scripted step, an out-of-order
+       scripted step, or any other legal line. Returns true if accepted. */
+    const parseTyped=(v)=>{
+      v=String(v).trim().replace(/^([DWUu]+)\s*∴\s*/,'$1: ');
+      const m=v.match(/^asm[:.]?\s*(.*)$/i);
+      const body=m?m[1]:v.replace(/^[∴:.\s]+/,'');
+      const wm=body.match(/^([DWU]+|u)\s*[:.]\s*(.*)$/i);
+      return {asm:!!m, body, world:wm?wm[1].toUpperCase():'', wff:wm?wm[2]:body};
+    };
+    const candMatches=(c,t)=>{
+      if((c.kind==='asm')!==t.asm) return false;
+      const wantW=(c.world||'').toUpperCase().replace(/[^A-Z]/g,''), wantF=canonP(c.typed);
+      return (t.world===wantW && canonP(t.wff)===wantF) || (wantW==='' && canonP(t.body)===wantF);
+    };
+    function legalStep(v){
+      if(/^refute$/i.test(String(v).trim())){
+        const r=replan();
+        if(r&&r.length&&r[0].kind==='refute') return {st:r[0], refute:true};
+        return null;
+      }
+      const t=parseTyped(v);
+      const cands=legalCandidates().filter(c=>candMatches(c,t));
+      if(cands.length){ const st=Object.assign({},cands[0]); st.alts=cands.map(c=>c.just); return {st}; }
+      // hand-written scripts (no engine): early RAA once two live lines contradict
+      if(!ENG && !t.asm && openAsmCount()===1 && contraPair()){
+        const k=S.steps.findIndex((x,ii)=>ii>=idx&&x.kind==='raa');
+        if(k>=0 && k===S.steps.length-1){ const r=S.steps[k];
+          if(!(r.world||'') && canonP(t.body)===canonP(r.typed)){
+            const pr=contraPair(), ai=openAsm();
+            return {st:Object.assign({},r,{just:`{from ${ai+1}; ${pr[0]+1} contradicts ${pr[1]+1}}`}), cut:true};
+          }
+        }
+      }
+      return null;
+    }
+    const acceptLegal=(res)=>{
+      if(res.cut){ S.steps=S.steps.slice(0,idx).concat([res.st]); }
+      else if(res.refute){ S.steps=S.steps.slice(0,idx).concat([res.st]); }
+      else { S.steps=S.steps.slice(0,idx).concat([res.st]); S._replan=true; }
+      right();
     };
     const right=()=>{
       const st0=S.steps[idx];
@@ -2672,7 +2843,8 @@ function proofPlayer(cfg){
       if(state.level>0) session.points=Math.max(0,session.points-pointsForWrong());
       beep('bad'); updateScoreBar();
       const fb=$('fb'); fb.className='feedback no show';
-      if(tries===1) fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${state.level>0?` (−${pointsForWrong()})`:''} ${hintForStep(S.steps[idx])}`;
+      if(noPlan||!S.steps[idx]) fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${state.level>0?` (−${pointsForWrong()})`:''} That line doesn't follow by the rules from the not-blocked-off lines.`;
+      else if(tries===1) fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${state.level>0?` (−${pointsForWrong()})`:''} ${hintForStep(S.steps[idx])}`;
       else { fb.innerHTML=`❌ The next line is: <b class="wff">${revealTxt}</b> (added for you, no further penalty).`; advance(); }
     };
     const hintForStep=(st)=>{
@@ -2694,7 +2866,7 @@ function proofPlayer(cfg){
       return uniqStrings(pool).filter(x=>x!==stepAnswerText(st));
     }
     function buildControls(){
-      const st=S.steps[idx];
+      const st=S.steps[idx]||{kind:'derive', typed:'', disp:'', just:''};
       const ctl=root.querySelector('#prfCtl');
       const stg=twStage();
       const twHtml = stg===2 ? `<div class="feedback info show" style="display:block;margin:8px 0">🛞 ${twInfo(st).text}</div>`
@@ -2705,7 +2877,7 @@ function proofPlayer(cfg){
           <input class="ans" id="ansInput" autocomplete="off" autocapitalize="off" spellcheck="false"
             placeholder='${st.kind==='refute'?'type REFUTE':(idx===0?'asm: …':'next line (or ASM: … / REFUTE)')}'>
           <button class="primary" id="prfGo">Enter</button></div>${justHtml(st)}${state.keyboard?keyboardHtml():''}</div>
-          <div class="rowbtns"><button class="hintbtn" id="prfGet">Get answer (−${Math.max(1,state.level)})</button></div>`;
+          <div class="rowbtns"${noPlan?' hidden':''}><button class="hintbtn" id="prfGet">Get answer (−${Math.max(1,state.level)})</button></div>`;
         const inp=ctl.querySelector('#ansInput'); inp.focus();
         const matchOne=(st,v)=>{
           let ok=false;
@@ -2718,16 +2890,18 @@ function proofPlayer(cfg){
             const worldTyped=wm?wm[1].toUpperCase():'';
             const wffTyped=wm?wm[2]:body;
             const want=(st.world||'');
-            const wantW=want.toUpperCase().replace(/[^A-Z]/g,''), wantF=canonWff(stepTyped(st));
+            const wantW=want.toUpperCase().replace(/[^A-Z]/g,''), wantF=canonP(stepTyped(st));
             // "u:A" may be a world prefix or belief notation, so try both readings
-            ok = prefOk && ((worldTyped===wantW && canonWff(wffTyped)===wantF) || (wantW==='' && canonWff(body)===wantF));
+            ok = prefOk && ((worldTyped===wantW && canonP(wffTyped)===wantF) || (wantW==='' && canonP(body)===wantF));
           }
           return ok;
         };
         const submit=()=>{
           const v=inp.value.trim(); if(!v) return;
           const j=eligibleSteps().find(k=>matchOne(S.steps[k],v));
-          if(j!==undefined){ promote(j); right(); }
+          if(j!==undefined){ promote(j); right(); return; }
+          const res=legalStep(v);
+          if(res) acceptLegal(res);
           else wrong(stepAnswerText(st));
         };
         ctl.querySelector('#prfGo').onclick=submit;
@@ -2741,11 +2915,14 @@ function proofPlayer(cfg){
         const extra=elig.length>1 && Math.random()<0.5 ? [elig[1+Math.floor(Math.random()*(elig.length-1))]] : [];
         const okOpts=[{t:correct,ok:true,j:idx}].concat(extra.map(k=>({t:stepAnswerText(S.steps[k]),ok:true,j:k})));
         const opts=shuffle(okOpts.concat(shuffle(distractorsFor(st).filter(t=>!okTexts.includes(t))).slice(0,4-okOpts.length).map(t=>({t,ok:false}))));
+        // a "distractor" that is in fact a legal line now is accepted too
+        opts.forEach(o=>{ if(!o.ok){ const r=legalStep(o.t); if(r){ o.ok=true; o.legal=r; } } });
         ctl.innerHTML=`${twHtml}<div class="instr" style="margin-top:8px">What's next${state.name?', '+esc(state.name):''}?</div>
-          ${justHtml(st)}<div class="choices">${opts.map((o,i)=>`<button class="choice" data-ok="${o.ok?1:0}" data-j="${o.ok?o.j:''}"><span class="num">${i+1}</span><span class="txt">${o.t}</span></button>`).join('')}</div>
+          ${justHtml(st)}<div class="choices">${opts.map((o,i)=>`<button class="choice" data-ok="${o.ok?1:0}" data-i="${i}" data-j="${o.ok&&!o.legal?o.j:''}"><span class="num">${i+1}</span><span class="txt">${o.t}</span></button>`).join('')}</div>
           <div class="rowbtns"><button class="hintbtn" id="prfGet">Get answer (−${Math.max(1,state.level)})</button></div>`;
         ctl.querySelectorAll('.choice').forEach(b=>b.onclick=()=>{
-          if(b.dataset.ok==='1'){ b.classList.add('good'); promote(+b.dataset.j); right(); }
+          const o=opts[+b.dataset.i];
+          if(b.dataset.ok==='1'){ b.classList.add('good'); if(o&&o.legal) acceptLegal(o.legal); else { promote(+b.dataset.j); right(); } }
           else{ b.classList.add('bad'); wrong(correct); }
         });
         ctl.querySelector('#prfGet').onclick=()=>{ tlog('h'); if(state.level>0){ session.points=Math.max(0,session.points-Math.max(1,state.level)); updateScoreBar(); } advance(); };
@@ -3406,10 +3583,10 @@ function renderModel(m, prems, concl){
 /* ============================================================================
    THE PROVER — runs Gensler's strategy and emits a proofPlayer step-script.
    ========================================================================== */
-function proveQuant(prems, concl, opts){
+function proveQuant(prems, concl, opts, init){
   opts=opts||{};
   const CAP=opts.cap||45, MAXC=opts.maxConsts||3, MAXDOM=opts.maxDom||3;
-  const lines=prems.map(f=>({f,asm:false,blocked:false}));
+  const lines=init ? init.map(L=>({f:L.f,asm:!!L.asm,blocked:!!L.blocked})) : prems.map(f=>({f,asm:false,blocked:false}));
   const steps=[];
   const live=()=>lines.map((L,i)=>({L,i})).filter(x=>!x.L.blocked);
   const liveHas=f=>live().some(x=>qEq(x.L.f,f));
@@ -3419,8 +3596,10 @@ function proveQuant(prems, concl, opts){
   const CPOOL=['a','b','c','d','e','g','h','j','k','m'];
   const newConst=()=>{ const used=new Set(allConsts()); return CPOOL.find(c=>!used.has(c)); };
 
-  const asm0=qNegS(concl);
-  push(asm0,true,psAsm(qRender(asm0),qRender(asm0),''));
+  if(!init){
+    const asm0=qNegS(concl);
+    push(asm0,true,psAsm(qRender(asm0),qRender(asm0),''));
+  } else if(!lines.some(L=>!L.blocked&&L.asm)) return {valid:true,steps};
 
   let guard=0;
   while(guard++<CAP){
@@ -3705,6 +3884,7 @@ function makeIScript(mode, wantValid){
     script.prem=cand.prem.map(qRender);
     script.premAst=cand.prem;
     script.concl=qRender(cand.concl);
+    script.eng={name:'quant', prems:cand.prem, concl:cand.concl, opts:cfg};
     script._raw={prem:cand.prem, concl:cand.concl, lvl};
     return {script, lvl};
   }
@@ -3715,6 +3895,7 @@ function makeIScript(mode, wantValid){
     : {prem:[ALL('x',IMP(PR(p,'x'),PR(q,'x'))), PR(p,'a')], concl:PR(q,'a')};
   const script=proveQuant(cand.prem, cand.concl, LVLCFG.easier);
   script.prem=cand.prem.map(qRender); script.premAst=cand.prem; script.concl=qRender(cand.concl);
+  script.eng={name:'quant', prems:cand.prem, concl:cand.concl, opts:LVLCFG.easier};
   script._raw={prem:cand.prem, concl:cand.concl, lvl:'easier'};
   return {script, lvl:'easier'};
 }
@@ -4423,15 +4604,18 @@ function mDegen(f){
 }
 /* Gensler-strategy S5 prover (single assumption; problems needing further
    assumptions are skipped by the generator) */
-function proveModal(prems, concl){
-  const lines=prems.map(f=>({w:'',f}));
+function proveModal(prems, concl, init){
   const steps=[];
+  if(init && init.some(L=>L.blocked)) return {valid:true,steps};   // already closed by RAA
+  const lines=init ? init.map(L=>({w:L.w||'',f:L.f})) : prems.map(f=>({w:'',f}));
   const push=(w,f,step)=>{ step.f=f; lines.push({w,f}); steps.push(step); };
   const has=(w,f)=>lines.some(L=>L.w===w&&qEq(L.f,f));
   const lineNo=i=>i+1;
   const worlds=()=>uniqStrings(lines.map(L=>L.w));
-  const asm0=qNegS(concl);
-  push('',asm0,psAsm(qRender(asm0),qRender(asm0),''));
+  let asmAt=prems.length+1;
+  if(init){ const k=init.findIndex(L=>L.asm); asmAt=k+1; }
+  else { const asm0=qNegS(concl); push('',asm0,psAsm(qRender(asm0),qRender(asm0),'')); }
+  const asm0=lines[asmAt-1].f;
   let guard=0;
   while(guard++<48){
     /* RAA — a contradiction inside one world */
@@ -4440,7 +4624,7 @@ function proveModal(prems, concl){
       if(lines[i].w===lines[j].w && qContra(lines[i].f,lines[j].f)){ pair=[i,j]; break outer; }
     if(pair){
       const der=qNegS(asm0);
-      push('',der,psRaa('',qRender(der),qRender(der),`{from ${prems.length+1}; ${lineNo(pair[0])} contradicts ${lineNo(pair[1])}}`));
+      push('',der,psRaa('',qRender(der),qRender(der),`{from ${asmAt}; ${lineNo(pair[0])} contradicts ${lineNo(pair[1])}}`));
       return {valid:true,steps};
     }
     let did=false;
@@ -4559,6 +4743,7 @@ function genKArg(hard, wantValid){
     script.prem=prems.map(qRender);
     script.premAst=prems;
     script.concl=qRender(concl);
+    script.eng={name:'modal', prems, concl};
     return script;
   }
   return null;

@@ -280,6 +280,10 @@
 </div>
 <script>
 (function(){
+  /* Inside a frame (Quiz Maker, the instructors' page) the lock is skipped:
+     the page around it is the one "copy" of the app. */
+  var framed; try{ framed = window.self !== window.top; }catch(e){ framed = true; }
+  if(framed) return;
   var NAME='newlogicola-single-instance', KEY='newlogicola-instance-lock', STALE=5000, BEAT=1500;
   var ov=document.getElementById('nlcLockOverlay'), note=document.getElementById('nlcLockNote');
   var blocked=false, id=Math.random().toString(36).slice(2)+Date.now();
@@ -360,7 +364,7 @@
         <li><b>Definitions</b> — spotting what's wrong with a proposed definition. <span class="muted">Set Q</span></li>
         <li><b>Fallacies</b> — naming the common mistakes that make bad arguments look convincing. <span class="muted">Set R</span></li>
       </ul>
-      <p class="muted" style="margin-top:10px">Master a proof set — <b>G</b>, <b>I</b>, or <b>K</b> — at level 9 to unlock its ungraded <b>Proof Builder</b>, a free-form practice workspace. Mastering <b>Set I</b> at level 9 also unlocks the <b>Non-Classical Workbench</b> — free logic, intuitionistic logic, and <b>medieval term logic</b> — with a <b>validity checker</b> and a <b>proof builder</b> for each system.</p>
+      <p class="muted" id="unlockNote" style="margin-top:10px">Master a proof set — <b>G</b>, <b>I</b>, or <b>K</b> — at level 9 to unlock its ungraded <b>Proof Builder</b>, a free-form practice workspace. Mastering <b>Set I</b> at level 9 also unlocks the <b>Non-Classical Workbench</b> — free logic, intuitionistic logic, and <b>medieval term logic</b> — with a <b>validity checker</b> and a <b>proof builder</b> for each system.</p>
     </div>
   </main>
 </div>
@@ -368,6 +372,18 @@
 <!-- Overlay -->
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
 
+<script>
+/* Instructor edition = this same file opened as index.html?instructor=1
+   (instructors.html is a thin wrapper that does exactly that). */
+var INSTRUCTOR = /[?&]instructor=1(&|$)/.test(location.search);
+if(INSTRUCTOR){
+  document.title='LogiCola — For Instructors';
+  var brandEl=document.querySelector('.brand'); if(brandEl && brandEl.lastChild) brandEl.lastChild.textContent=' LogiCola — For Instructors';
+  var unl=document.getElementById('unlockNote');
+  var dc=document.querySelector('.designer-credit'); if(dc) dc.hidden=true;
+  if(unl) unl.innerHTML='Master a proof set — <b>G</b>, <b>I</b>, or <b>K</b> — at level 9 to unlock its ungraded <b>Proof Builder</b>, a free-form practice workspace. <b>Instructor edition:</b> all proof builders and the <b>Non-Classical Workbench</b> (free · intuitionistic · medieval term logic — validity checker &amp; proof builder) are open with no level-9 unlocks.';
+}
+</script>
 <script>
 "use strict";
 /* ============================================================================
@@ -3130,7 +3146,7 @@ function mountCopi(root, premAsts, conclAst, opts){
   inp.focus();
 }
 function launchCopiChecker(){
-  if((state.completed.G||0)<9){
+  if(!INSTRUCTOR && (state.completed.G||0)<9){
     openModal(`<button class="close" onclick="closeModal()">×</button>
       <h2>🔒 Proof Builder Tool</h2>
       <p>The Proof Builder unlocks once you master <b>Set G</b> at scoring level <b>9</b> — finish the set at level 9 and it's yours.</p>
@@ -4187,7 +4203,7 @@ function mountQCopi(root, premAsts, conclAst, opts){
 /* ---- Predicate Proof Builder: ungraded tool, twin of the propositional one.
    Unlocks once Set I is mastered at level 9. ---- */
 function launchQuantChecker(){
-  if((state.completed.I||0)<9){
+  if(!INSTRUCTOR && (state.completed.I||0)<9){
     openModal(`<button class="close" onclick="closeModal()">×</button>
       <h2>🔒 Predicate Proof Builder</h2>
       <p>The Predicate Proof Builder unlocks once you master <b>Set I</b> at scoring level <b>9</b> — finish the set at level 9 and it's yours.</p>
@@ -4362,7 +4378,7 @@ function mountMCopi(root, premAsts, conclAst, opts){
   inp.focus();
 }
 function launchModalChecker(){
-  if((state.completed.K||0)<9){
+  if(!INSTRUCTOR && (state.completed.K||0)<9){
     openModal(`<button class="close" onclick="closeModal()">×</button>
       <h2>🔒 Modal Proof Builder</h2>
       <p>The Modal Proof Builder unlocks once you master <b>Set K</b> at scoring level <b>9</b> — finish the set at level 9 and it's yours.</p>
@@ -7663,7 +7679,7 @@ const NC_ACCENT = typeof DEVIANT_ACCENT!=='undefined' ? DEVIANT_ACCENT : '#a78bf
 const NC = { logic:'free', mode:'check', prem:'', concl:'' }; // session UI state
 
 function ncGate(){
-  if((state.completed.I||0)<9){
+  if(!INSTRUCTOR && (state.completed.I||0)<9){
     openModal(`<button class="close" onclick="closeModal()">×</button>
       <h2>🔒 Non-Classical Workbench</h2>
       <p>This workbench unlocks once you master <b>Set I</b> (Quantificational Proofs) at scoring level <b>9</b>.</p>
@@ -8672,7 +8688,7 @@ function fileMenu(){
       <span class="id">Set ${id}</span><span class="nm">${s.name}</span>
       <span class="ch">${s.chapter}${done?` · <span class="badge">✓ Mastered · level ${done}</span>`:''}</span></button>`;
   };
-  const toolUnlocked=(state.completed.G||0)>=9;
+  const toolUnlocked=INSTRUCTOR||(state.completed.G||0)>=9;
   const toolBtn= toolUnlocked
     ? `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;background:linear-gradient(160deg,rgba(45,212,191,0.16),rgba(45,212,191,0.05))" onclick="closeModal();launchCopiChecker()">
       <span class="id" style="color:#2dd4bf">🛠 Tool</span><span class="nm">Propositional Proof Builder</span>
@@ -8680,7 +8696,7 @@ function fileMenu(){
     : `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;opacity:.45;cursor:not-allowed" title="Master Set G at level 9 to unlock" onclick="event.preventDefault()">
       <span class="id" style="color:#2dd4bf">🔒 Tool</span><span class="nm">Propositional Proof Builder</span>
       <span class="ch">Unlocks when you master Set G at level 9</span></button>`;
-  const qtoolUnlocked=(state.completed.I||0)>=9;
+  const qtoolUnlocked=INSTRUCTOR||(state.completed.I||0)>=9;
   const qtoolBtn= qtoolUnlocked
     ? `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;background:linear-gradient(160deg,rgba(45,212,191,0.16),rgba(45,212,191,0.05))" onclick="closeModal();launchQuantChecker()">
       <span class="id" style="color:#2dd4bf">🛠 Tool</span><span class="nm">Quantificational Proof Builder</span>
@@ -8688,7 +8704,7 @@ function fileMenu(){
     : `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;opacity:.45;cursor:not-allowed" title="Master Set I at level 9 to unlock" onclick="event.preventDefault()">
       <span class="id" style="color:#2dd4bf">🔒 Tool</span><span class="nm">Quantificational Proof Builder</span>
       <span class="ch">Unlocks when you master Set I at level 9</span></button>`;
-  const ktoolUnlocked=(state.completed.K||0)>=9;
+  const ktoolUnlocked=INSTRUCTOR||(state.completed.K||0)>=9;
   const ktoolBtn= ktoolUnlocked
     ? `<button type="button" class="setbtn tool" style="border-color:#2dd4bf;background:linear-gradient(160deg,rgba(45,212,191,0.16),rgba(45,212,191,0.05))" onclick="closeModal();launchModalChecker()">
       <span class="id" style="color:#2dd4bf">🛠 Tool</span><span class="nm">Modal Proof Builder</span>
@@ -8701,7 +8717,7 @@ function fileMenu(){
      <div class="grid">${ids.filter(id=>SETS[id]).map(btn).join('')}</div>`;
   const groups   = SET_GROUPS.filter(g=>g[0]!=='Sets and Metatheory').map(gHtml).join('');
   const smIds = (SET_GROUPS.find(g=>g[0]==='Sets and Metatheory')||[,,[]])[2]||[];
-  const dUnlocked=(state.completed.I||0)>=9;
+  const dUnlocked=INSTRUCTOR||(state.completed.I||0)>=9;
   const deviantOne = dUnlocked
     ? `<button type="button" class="setbtn tool" style="border-color:#a78bfa;background:linear-gradient(160deg,rgba(167,139,250,0.16),rgba(167,139,250,0.05))" onclick="closeModal();launchDeviant()"><span class="id" style="color:#a78bfa">◆ Tool</span><span class="nm">Non-Classical Workbench</span><span class="ch">Free · intuitionistic · medieval term logic — validity checker &amp; proof builder · ungraded</span></button>`
     : `<button type="button" class="setbtn tool" style="border-color:#a78bfa;opacity:.45;cursor:not-allowed" title="Master Set I at level 9 to unlock" onclick="event.preventDefault()"><span class="id" style="color:#a78bfa">🔒 Tool</span><span class="nm">Non-Classical Workbench</span><span class="ch">Unlocks when you master Set I at level 9</span></button>`;
@@ -9155,7 +9171,7 @@ function renderProblem(){
     html+=`</div>`;
   }
   html+=`<div class="instr">${p.instr}</div>`;
-  html+=`<div class="feedback" id="fb"></div>`;
+  html+=`<div class="feedback" id="fb" role="status" aria-live="polite"></div>`;
   html+=`<div class="rowbtns">
      <button class="hintbtn" onclick="showAnswer()">Show answer</button>
      <button class="ghost" onclick="skipProblem()">Skip</button>
@@ -9315,12 +9331,42 @@ window.showAnswer=function(){
 };
 window.skipProblem=function(){ tlog('s'); nextProblem(); };
 
+/* Which activity / difficulty / system the student is doing right now, as the
+   set menu stores it. Recorded with each finished set (score files v4). */
+function doneSlot(id){
+  const M=MENU[id]||{};
+  let act=M.key?(state[M.key]||''):'';
+  if(id==='G') act=state.gMode||'both';
+  if(id==='I') act=state.iKind||'both';
+  if(id==='K') act=state.kMode||'both';
+  let diff='';
+  if(id==='G') diff=state.gLevel||'easier';
+  else if(id==='I') diff=state.iMode||'easier';
+  else if(id==='K') diff=['valid','invalid','both'].includes(act)?(state.kLevel||'easier'):(act==='galactic'?(state.modalSystem||'S5'):'');
+  else if(M.diffKey) diff=state[M.diffKey]||'easier';
+  else if(M.diff) diff=state.harder?'harder':'easier';
+  let sys='';
+  if(id==='B') sys=state.bImport==='traditional'?'traditional':'modern';
+  if(id==='K'&&act==='galactic') sys=state.modalSystem||'S5';
+  const typed=(id==='G'&&['valid','invalid','both'].includes(act)) || (!!M.type && !!state.type);
+  return {act:act||'-', diff:diff||'-', sys, ans:typed?'typed':'MC'};
+}
+function todayStr(){ const d=new Date(), pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function recordDone(id,lvl){
+  const k=doneSlot(id), t=todayStr();
+  state.done=state.done||{};
+  const S=state.done[id]=state.done[id]||{}, A=S[k.act]=S[k.act]||{};
+  const r=A[k.diff]=A[k.diff]||{lv:0, first:t, last:t, n:0};
+  r.lv=Math.max(r.lv||0,lvl); r.last=t; r.n=(r.n||0)+1; r.ans=k.ans; if(k.sys) r.sys=k.sys;
+}
 function completeSet(){
   beep('win');
   const id=session.set; const lvl=state.level;
   const prev=state.completed[id]||0;
   tlog('F',{lv:lvl});
-  if(lvl>prev){ state.completed[id]=lvl; save(); }
+  recordDone(id,lvl);
+  if(lvl>prev) state.completed[id]=lvl;
+  save();
   openModal(`<div class="completeburst">🎉</div>
     <h2 style="text-align:center">Exercise Complete!</h2>
     <p style="text-align:center">You finished <b>Set ${id}: ${SETS[id].name}</b> at scoring level <b>${lvl}</b>.</p>
@@ -9347,13 +9393,13 @@ function scoresView(){
       <button class="ghost" onclick="document.getElementById('impFile').click()">Import</button>
       <button class="ghost" onclick="resetScores()">Reset all</button>
     </div>
-    <p class="muted" style="font-size:12px">Export creates a signed <b>.lgc</b> file you can send to your instructor. It contains only your name, your best level for each set, and which sets you have finished. Nothing else about your practice is recorded. Import restores a previously exported file, for example to move your record to another computer.</p>
+    <p class="muted" style="font-size:12px">Export creates a signed <b>.lgc</b> file you can send to your instructor. It contains only your name, your best level for each set, and, for each activity and difficulty you finished: your best level, the first and last dates, how many times, whether you typed or picked answers, and the logic system used. Nothing else about your practice is recorded. Import restores a previously exported file, for example to move your record to another computer.</p>
     <input type="file" id="impFile" style="display:none" accept=".lgc,.json,application/json,text/plain" onchange="importScores(event)">`);
 }
 function b64FromBytes(bytes){ let s=''; const CH=0x8000; for(let i=0;i<bytes.length;i+=CH) s+=String.fromCharCode.apply(null,bytes.subarray(i,Math.min(i+CH,bytes.length))); return btoa(s); }
 function bytesFromB64(b64){ const s=atob(b64); const u=new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
 window.exportScores=async function(){
-  const payload={v:3,name:state.name||'',completed:state.completed||{}};
+  const payload={v:4,name:state.name||'',completed:state.completed||{},done:cleanDone(state.done)};
   const raw=new TextEncoder().encode(JSON.stringify(payload));
   let flag='p', body;
   try{
@@ -9366,6 +9412,20 @@ window.exportScores=async function(){
   const who=(state.name||'me').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_')||'me';
   a.download=`logicola-${who}-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.lgc`; a.click();
 };
+/* done[set][activity][difficulty] = {lv, first, last, n, ans, sys} */
+function cleanDone(d){
+  const out={}, okKey=k=>/^[\w-]{1,24}$/.test(k), okDate=x=>/^\d{4}-\d\d-\d\d$/.test(x||'');
+  if(!d||typeof d!=='object') return out;
+  for(const id in d){ if(!SETS[id]||!d[id]||typeof d[id]!=='object') continue;
+    for(const a in d[id]){ if(!okKey(a)||!d[id][a]||typeof d[id][a]!=='object') continue;
+      for(const f in d[id][a]){ const r=d[id][a][f]; if(!okKey(f)||!r||typeof r!=='object') continue;
+        const lv=Math.min(9,Math.max(0,Math.round(+r.lv||0))), n=Math.max(1,Math.round(+r.n||1));
+        const rec={lv, first:okDate(r.first)?r.first:'', last:okDate(r.last)?r.last:'', n};
+        if(r.ans==='MC'||r.ans==='typed') rec.ans=r.ans;
+        if(typeof r.sys==='string'&&okKey(r.sys)) rec.sys=r.sys;
+        ((out[id]=out[id]||{})[a]=out[id][a]||{})[f]=rec; } } }
+  return out;
+}
 function cleanCompleted(c){
   const out={}; if(c && typeof c==='object') for(const k in c){ const n=+c[k]; if(SETS[k] && n>0) out[k]=Math.min(9,Math.round(n)); }
   return out;
@@ -9389,6 +9449,7 @@ window.importScores=function(ev){
         const d=JSON.parse(new TextDecoder().decode(bytes));
         if(d.name) state.name=d.name;
         state.completed=cleanCompleted(d.completed);   /* older files: any practice log in them is ignored */
+        state.done=cleanDone(d.done);
         save();
         updateScoreBar(); scoresView();
         if(!okMac) alert('Note: this file did not pass its integrity check (it may have been edited). It was imported anyway, but an instructor page would flag it.');
@@ -9397,13 +9458,14 @@ window.importScores=function(ev){
         if(!d || typeof d!=='object' || !d.completed) throw new Error('format');
         if(d.name) state.name=d.name;
         state.completed=cleanCompleted(d.completed);
+        state.done=cleanDone(d.done);
         save(); updateScoreBar(); scoresView();
       }
     }catch(e){ alert('Could not read that file. Choose a .lgc score file exported from LogiCola.'); }
   };
   r.readAsText(f);
 };
-window.resetScores=function(){ if(confirm('Erase all completion records?')){ state.completed={}; save(); scoresView(); } };
+window.resetScores=function(){ if(confirm('Erase all completion records?')){ state.completed={}; state.done={}; save(); scoresView(); } };
 
 /* ---- titles + one-line "about" blurbs per set ---- */
 const SET_TITLES={

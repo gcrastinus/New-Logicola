@@ -18,6 +18,9 @@ with sync_playwright() as p:
     check('instructor.html is identical to logiskor.html (keep them in step)', a==b2)
     pg.goto(B+'logiskor.html'+Q)
     check('logiskor.html loads', 'LogiSkor' in pg.inner_text('.brand'))
+    # Old Aug-Oct link: logicola-for-instructors.html redirects to LogiSkor, keeping query and hash.
+    pg.goto(B+'logicola-for-instructors.html'+Q+'#h'); pg.wait_for_url('**/logiskor.html*',timeout=15000)
+    check('logicola-for-instructors.html redirects to logiskor.html', 'logiskor.html' in pg.url and 'LogiSkor' in pg.inner_text('.brand'), pg.url)
     pg.goto(B+'instructors-links.html'+Q)
     hrefs=pg.eval_on_selector_all('main a','els=>els.map(e=>e.getAttribute("href"))')
     check('links page has the 4 links', sorted(hrefs)==sorted(['index.html','instructors.html','logiskor.html','quizmaker.html']), hrefs)

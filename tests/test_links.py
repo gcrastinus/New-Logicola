@@ -1,4 +1,4 @@
-"""LogiSkor rename: instructor.html redirects; links page links all load."""
+"""LogiSkor rename: instructor.html (old link) and logiskor.html both load; links page links all load."""
 import sys, urllib.request
 from urllib.parse import urljoin
 from playwright.sync_api import sync_playwright
@@ -9,11 +9,15 @@ def check(n,c,info=''):
     res.append(c); print(('PASS ' if c else 'FAIL ')+n+('' if c else '  -- '+str(info)))
 with sync_playwright() as p:
     br=p.chromium.launch(); pg=br.new_page()
-    pg.goto(B+'instructor.html'+Q); pg.wait_for_url('**/logiskor.html*',timeout=15000)
-    check('instructor.html redirects to logiskor.html', 'logiskor.html' in pg.url, pg.url)
+    # Old link: instructor.html is again a real page (the same LogiSkor report), not a redirect.
+    pg.goto(B+'instructor.html'+Q+'#old')
+    pg.wait_for_selector('.brand',timeout=15000)
+    check('instructor.html is the LogiSkor page itself (no redirect)', pg.url.split('#')[0].endswith('instructor.html'+Q), pg.url)
     check('LogiSkor heading and title', 'LogiSkor' in pg.inner_text('.brand') and 'LogiSkor' in pg.title(), pg.title())
-    html=urllib.request.urlopen(B+'instructor.html'+Q).read().decode()
-    check('redirect has meta refresh, JS redirect and visible link', 'http-equiv="refresh"' in html and "location.replace('logiskor.html'" in html and '<a href="logiskor.html">' in html)
+    a=urllib.request.urlopen(B+'instructor.html'+Q).read(); b2=urllib.request.urlopen(B+'logiskor.html'+Q).read()
+    check('instructor.html is identical to logiskor.html (keep them in step)', a==b2)
+    pg.goto(B+'logiskor.html'+Q)
+    check('logiskor.html loads', 'LogiSkor' in pg.inner_text('.brand'))
     pg.goto(B+'instructors-links.html'+Q)
     hrefs=pg.eval_on_selector_all('main a','els=>els.map(e=>e.getAttribute("href"))')
     check('links page has the 4 links', sorted(hrefs)==sorted(['index.html','instructors.html','logiskor.html','quizmaker.html']), hrefs)

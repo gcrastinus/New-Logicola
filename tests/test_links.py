@@ -23,6 +23,19 @@ with sync_playwright() as p:
     check('logicola-for-instructors.html is the LogiSkor page itself (no redirect)', pg.url.split('#')[0].endswith('logicola-for-instructors.html'+Q) and 'LogiSkor' in pg.inner_text('.brand'), pg.url)
     c=urllib.request.urlopen(B+'logicola-for-instructors.html'+Q).read()
     check('logicola-for-instructors.html is identical to logiskor.html', c==b2)
+    # No white bands: html (canvas) and body are dark at top, bottom and in a tall/short page.
+    for pageName in ('logiskor.html','instructor.html','logicola-for-instructors.html'):
+        pg.set_viewport_size({'width':1280,'height':1400}); pg.goto(B+pageName+Q); pg.wait_for_selector('.brand')
+        bg=pg.evaluate("[getComputedStyle(document.documentElement).backgroundColor,getComputedStyle(document.documentElement).backgroundImage!=='none',document.body.scrollHeight>=window.innerHeight]")
+        check(pageName+' page background is dark and fills the window', bg[0]!='rgba(0, 0, 0, 0)' and bg[0]!='rgb(255, 255, 255)' and bg[1] and bg[2], bg)
+        pg.screenshot(path='/tmp/logiskor-'+pageName.split('.')[0]+'.png')
+    from PIL import Image
+    for pageName in ('logiskor','instructor','logicola-for-instructors'):
+        im=Image.open('/tmp/logiskor-'+pageName+'.png').convert('RGB'); w,h=im.size
+        pts=[(2,2),(w-3,2),(2,h-3),(w-3,h-3),(w//2,h-3),(w//2,2)]
+        bad=[im.getpixel(q) for q in pts if sum(im.getpixel(q))>300]
+        check(pageName+' screenshot has no light band at edges', not bad, bad)
+    pg.set_viewport_size({'width':1280,'height':720})
     pg.goto(B+'instructors-links.html'+Q)
     hrefs=pg.eval_on_selector_all('main a','els=>els.map(e=>e.getAttribute("href"))')
     check('links page has the 4 links', sorted(hrefs)==sorted(['index.html','instructors.html','logiskor.html','quizmaker.html']), hrefs)

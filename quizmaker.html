@@ -3540,7 +3540,8 @@ function proofPlayer(cfg){
        quantifier/modal) step from live lines, OR an assumption that breaks an
        unbroken wff, OR RAA once any two live lines contradict. After an
        off-script step the rest of the proof (hints, "Get answer") is re-planned
-       from the lines actually on the page. REFUTE still needs full breakdown. */
+       from the lines actually on the page. REFUTE still needs full breakdown,
+       and only the student ever enters REFUTE (never "added for you"). */
     const ENG=S.eng||null;
     const stripTags=t=>String(t).replace(/<[^>]*>/g,'').replace(/&nbsp;/g,' ');
     const canonRaw=t=>canonWff(stripTags(t));
@@ -3862,6 +3863,10 @@ function proofPlayer(cfg){
       beep('bad'); updateScoreBar();
       const fb=$('fb'); fb.className='feedback no show';
       if(noPlan||!S.steps[idx]) fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${state.level>0?` (−${pointsForWrong()})`:''} That line doesn't follow by the rules from the not-blocked-off lines.`;
+      /* REFUTE is never entered for the student (R1, Nov 2026): recognizing that
+         the strategy has run out is part of the exercise, so a wrong answer at
+         the REFUTE point gets the hint every time and the problem waits. */
+      else if(S.steps[idx].kind==='refute') fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${state.level>0?` (−${pointsForWrong()})`:''} ${hintForStep(S.steps[idx])}${tries>1?' LogiCola won\'t enter REFUTE for you — type it yourself to finish the problem.':''}`;
       else if(tries===1) fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${state.level>0?` (−${pointsForWrong()})`:''} ${hintForStep(S.steps[idx])}`;
       else { fb.innerHTML=`❌ The next line is: <b class="wff">${revealTxt}</b> (added for you, no further penalty).`; advance(); }
     };
@@ -3873,6 +3878,15 @@ function proofPlayer(cfg){
     };
     const stepAnswerText=(st)=> st.kind==='refute' ? 'REFUTE' : (st.kind==='asm'?('asm: '+st.disp.replace(/^asm:\s*/,'')):st.disp.replace(new RegExp('^'+SYM.therefore+'\\s*'),''));
     const stepTyped=(st)=> st.typed;
+    /* "Get answer" at the REFUTE point names the answer but doesn't enter it;
+       the hint is charged once per problem, not once per click. */
+    let refHintPaid=false;
+    const refuteGetAnswer=(how)=>{
+      tlog('h');
+      if(!refHintPaid){ refHintPaid=true; if(state.level>0){ session.points=Math.max(0,session.points-Math.max(1,state.level)); updateScoreBar(); } }
+      const fb=$('fb'); fb.className='feedback info show';
+      fb.innerHTML=`💡 Nothing more can be derived and no two not-blocked-off lines contradict, so the answer is <b>REFUTE</b>. ${how} — LogiCola won't enter it for you.`;
+    };
     function distractorsFor(st){
       const pool=[];
       S.steps.forEach(s2=>{ if(s2.typed&&s2.typed!==st.typed&&s2.kind!=='refute') pool.push(stepAnswerText(s2)); });
@@ -3925,7 +3939,7 @@ function proofPlayer(cfg){
         ctl.querySelector('#prfGo').onclick=submit;
         inp.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); });
         const jIn=ctl.querySelector('#jInput'); if(jIn) jIn.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); });
-        ctl.querySelector('#prfGet').onclick=()=>{ tlog('h'); if(state.level>0){ session.points=Math.max(0,session.points-Math.max(1,state.level)); updateScoreBar(); } const fb=$('fb'); fb.className='feedback info show'; fb.innerHTML=`💡 Next line: <b class="wff">${stepAnswerText(st)}</b>`; advance(); };
+        ctl.querySelector('#prfGet').onclick=()=>{ if(st.kind==='refute'){ refuteGetAnswer('Type REFUTE to finish'); inp.focus(); return; } tlog('h'); if(state.level>0){ session.points=Math.max(0,session.points-Math.max(1,state.level)); updateScoreBar(); } const fb=$('fb'); fb.className='feedback info show'; fb.innerHTML=`💡 Next line: <b class="wff">${stepAnswerText(st)}</b>`; advance(); };
       } else {
         const correct=stepAnswerText(st);
         const elig=eligibleSteps();
@@ -3943,7 +3957,7 @@ function proofPlayer(cfg){
           if(b.dataset.ok==='1'){ b.classList.add('good'); if(o&&o.legal) acceptLegal(o.legal); else { promote(+b.dataset.j); right(); } }
           else{ b.classList.add('bad'); wrong(correct); }
         });
-        ctl.querySelector('#prfGet').onclick=()=>{ tlog('h'); if(state.level>0){ session.points=Math.max(0,session.points-Math.max(1,state.level)); updateScoreBar(); } advance(); };
+        ctl.querySelector('#prfGet').onclick=()=>{ if(st.kind==='refute'){ refuteGetAnswer('Choose REFUTE to finish'); return; } tlog('h'); if(state.level>0){ session.points=Math.max(0,session.points-Math.max(1,state.level)); updateScoreBar(); } advance(); };
         const keyH=e=>{ if(/^[1-4]$/.test(e.key)){ const bs=ctl.querySelectorAll('.choice'); const i=+e.key-1; if(bs[i]) bs[i].click(); } };
         ctl.addEventListener('keydown',keyH);
       }

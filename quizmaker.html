@@ -1758,6 +1758,11 @@ function makeA(english, answer, distractors, opts, note){
       return `Your answer denies — but the sentence affirms. Re-read where (if anywhere) the "not" belongs.`;
     if(!/ is not /.test(c)&&/ is not /.test(answer))
       return `The sentence contains a denial that your answer drops — the "not" goes ${/^some/.test(answer)?'after "is"':'in the predicate'}.`;
+    const live=String(english).match(/^(.+) lives in (.+)\.$/);
+    const liveAns=String(answer).match(/^([a-z]) is ([A-Z])$/);
+    const liveTry=c.match(/^([A-Za-z]) is ([A-Za-z])$/);
+    if(live&&liveAns&&liveTry&&liveTry[1].toLowerCase()===liveAns[1]&&liveTry[2].toUpperCase()==='L'&&liveAns[2]!=='L')
+      return `The general term is "lives in ${live[2]}," but the capital letter comes from the <b>place</b>, not from "lives." Use <b>${liveAns[2]}</b> (for ${live[2]}).`;
     return null;
   };
   return {
@@ -1810,15 +1815,38 @@ function canonSyll(s){
   return s.toLowerCase();
 }
 function acceptSyll(input,answer){ return canonSyll(input)===canonSyll(answer); }
+/* Expand 2-letter USPS state (and DC) codes so a place entered as "FL"
+   appears as "Florida." The capital letter for "lives in …" comes from the
+   place (F), not from "lives" (L) — the same convention as Gensler's
+   example "drives a Buick" → B. */
+const USPS_PLACE={
+  AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',
+  CO:'Colorado',CT:'Connecticut',DC:'Washington, D.C.',DE:'Delaware',
+  FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',
+  IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',ME:'Maine',MD:'Maryland',
+  MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',MS:'Mississippi',
+  MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',
+  NJ:'New Jersey',NM:'New Mexico',NY:'New York',NC:'North Carolina',
+  ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',PA:'Pennsylvania',
+  RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',
+  TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',WA:'Washington',
+  WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming'
+};
+function formalPlace(raw){
+  const place=String(raw||'').trim()||'New York';
+  const letters=place.replace(/[^A-Za-z]/g,'');
+  if(letters.length===2){ const full=USPS_PLACE[letters.toUpperCase()]; if(full) return full; }
+  return place;
+}
 /* definite description, optionally with the user's place ("...in New York") */
 function makeDesc(avoidLet, withLoc){
   const noun=pick(CATS.filter(c=>c.let.toLowerCase()!==avoidLet));
-  const place=(state.place||'').trim()||'New York';
+  const place=formalPlace(state.place);
   return {desc:`the ${pick(SUPERLATIVES)} ${noun.sg}${withLoc?` in ${place}`:''}`, let:noun.let.toLowerCase()};
 }
 function userInfo(){
   const raw=(state.name||'').trim(); const first=raw?raw.split(/\s+/)[0]:'';
-  const nm=first||pick(NAMES).nm; const place=(state.place||'').trim()||'New York';
+  const nm=first||pick(NAMES).nm; const place=formalPlace(state.place);
   return {nm, let:nm[0].toLowerCase(), place, placeLet:(place.replace(/[^A-Za-z]/g,'')[0]||'N').toUpperCase()};
 }
 /* singular-term problems: predication, adjectives, identity via definite
@@ -1851,7 +1879,7 @@ function genASing(kind){
   const u=userInfo();  // userGen: user's name + location as a general predicate
   return {english:`${u.nm} lives in ${u.place}.`, answer:`${u.let} is ${u.placeLet}`,
     D:[`${u.let} is ${u.placeLet.toLowerCase()}`,`${u.placeLet} is ${u.let}`,`${u.let} is not ${u.placeLet}`,`all ${u.let} is ${u.placeLet}`],
-    note:`"lives in ${u.place}" is a general term (many people do), so a capital letter.`};
+    note:`"${u.placeLet}" stands for the general term "lives in ${u.place}" (many people do), so a capital letter. The letter comes from the place, not from "lives."`};
 }
 /* group idioms by wff form so Set B can phrase statements idiomatically too */
 const A_IDIOM_BY_FORM={all:[],no:[],some:[],somenot:[]};
@@ -3785,6 +3813,7 @@ function proofPlayer(cfg){
       fb.innerHTML=`🏁 <b>Problem complete!</b> The argument is <b>${S.valid?'VALID':'INVALID'}</b>. +5 bonus. <div class="rowbtns"><button class="primary" onclick="nextProblem()">Next problem →</button></div>`;
       session.points+=5; beep('win'); updateScoreBar();
       if(session.points>=100) completeSet();
+      else focusNextProblem();
     };
     const advance=()=>{
       const st=S.steps[idx];
@@ -8194,7 +8223,7 @@ function optForm(first){
   <h2>${first?'Welcome to LogiCola':'Options'}</h2>
   <p class="muted">${first?'Scores are saved on this device under your name.':''}</p>
   <div class="field"><label>Name (your last name)</label><input id="opName" value="${esc(state.name)}" placeholder="e.g., Gensler"></div>
-  <div class="field"><label>Place (sometimes used in problems)</label><input id="opPlace" value="${esc(state.place)}" placeholder="e.g., Michigan"></div>
+  <div class="field"><label>Place (sometimes used in problems — write the full name, e.g. Florida, not FL)</label><input id="opPlace" value="${esc(state.place)}" placeholder="e.g., Florida or Michigan"></div>
   <div class="field"><label>Scoring level (9 hardest → 1 easiest, 0 = practice/off)</label>
     <select id="opLevel">${[9,8,7,6,5,4,3,2,1,0].map(n=>`<option ${state.level===n?'selected':''}>${n}</option>`).join('')}</select></div>
   <div class="field"><label>Sound effects</label>
@@ -10197,7 +10226,7 @@ function renderProblem(){
   updateScoreBar();
   if(p.mode==='custom' && p.mount){ p.mount($('customBody')); }
   const inp=$('ansInput');
-  if(inp){ inp.focus(); inp.addEventListener('keydown',e=>{ if(e.key==='Enter') answerType(); }); }
+  if(inp){ inp.focus(); inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ if(enterGoesToNextProblem(e)){ e.preventDefault(); nextProblem(); } else answerType(); } }); }
   bindDiceTable();
   window.scrollTo(0,0);
 }
@@ -10219,6 +10248,37 @@ window.backspace=function(){ const i=$('ansInput'); if(!i)return; i.value=i.valu
 function pointsForWrong(){ return state.level; } // lose = level (0 => practice)
 function pointsForRight(){ return 10; }
 function nextBtn(){ return '<div class="rowbtns"><button class="primary" onclick="nextProblem()">Next problem →</button></div>'; }
+/* A scored problem is finished when this button is on screen. Enter then
+   goes to the next problem, including when focus is still in the answer box.
+   Enter in a textarea (scratch space, multi-line premises) is left alone. */
+function visibleNextProblemButton(){
+  return [...document.querySelectorAll('button.primary')].find(b=>{
+    if(!/next\s+problem/i.test(b.textContent||'')||b.disabled) return false;
+    const r=b.getClientRects(); return r.length && r[0].width>0 && r[0].height>0;
+  })||null;
+}
+/* Don't focus Next in the same Enter keystroke that just submitted an
+   answer — the browser would treat that Enter as a click on the button
+   and skip the feedback. Wait for keyup, or a short tick after a click. */
+let pendingFocusNext=0;
+function applyFocusNextProblem(){
+  if(!pendingFocusNext) return;
+  clearTimeout(pendingFocusNext); pendingFocusNext=0;
+  document.removeEventListener('keyup', applyFocusNextProblem, true);
+  const b=visibleNextProblemButton(); if(b) b.focus();
+}
+function focusNextProblem(){
+  if(pendingFocusNext){ clearTimeout(pendingFocusNext); pendingFocusNext=0; }
+  document.removeEventListener('keyup', applyFocusNextProblem, true);
+  document.addEventListener('keyup', applyFocusNextProblem, true);
+  pendingFocusNext=setTimeout(applyFocusNextProblem, 250);
+}
+function enterGoesToNextProblem(e){
+  if(!e||e.key!=='Enter'||e.altKey||e.ctrlKey||e.metaKey||e.shiftKey) return false;
+  if(e.target&&e.target.closest&&e.target.closest('textarea')) return false;
+  if(overlay&&overlay.classList.contains('show')) return false;
+  return !!visibleNextProblemButton();
+}
 function awardCorrect(explainHtml, praise){
   tlog('c',{a:session.lastAnswer,n:session.tries||0}); session.lastAnswer=undefined;
   beep('good');
@@ -10228,6 +10288,7 @@ function awardCorrect(explainHtml, praise){
   session.points += (state.level>0?pointsForRight():10);
   updateScoreBar();
   if(session.points>=100) completeSet();
+  else focusNextProblem();
 }
 function penalizeWrong(hintHtml, revealHtml){
   tlog('w',{a:session.lastAnswer}); session.lastAnswer=undefined;
@@ -10240,10 +10301,11 @@ function penalizeWrong(hintHtml, revealHtml){
   const cost=state.level>0?` (−${pointsForWrong()})`:'';
   if(session.tries===1 && hintHtml!=null){
     fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${cost} ${hintHtml||'Try again.'}`;
+    const inp=$('ansInput'); if(inp) inp.focus();
   } else {
     fb.innerHTML=`❌ <b>Not quite.</b>${cost} ${revealHtml||''}${nextBtn()}`;
+    focusNextProblem();
   }
-  const inp=$('ansInput'); if(inp) inp.focus();
   return session.tries;
 }
 /* ---- MC / TF ---- */
@@ -10344,6 +10406,7 @@ window.showAnswer=function(){
   fb.innerHTML=`💡 ${p.explain?p.explain():('Answer: '+wff(p.answer||''))}${nextBtn()}`;
   if(p.mode==='picklist') disablePicklist(true);
   else disableChoices(true);
+  focusNextProblem();
 };
 window.skipProblem=function(){ tlog('s'); nextProblem(); };
 
@@ -10647,7 +10710,7 @@ function copiRulesHtml(){
     <table style="border-collapse:collapse;font-size:14px;line-height:1.5">${repl.map(row).join('')}</table>`;
 }
 const HELP_EX={
-  A:()=>`“Every dentist is funny” → ${wff('all D is F')}.<br>“Al is an artist” → ${wff('a is A')} (a general term takes a capital).<br>“Al is the tallest dentist” → ${wff('a is d')} — a definite description is a singular term, so a small letter, and “is” means identity.`,
+  A:()=>`“Every dentist is funny” → ${wff('all D is F')}.<br>“Al is an artist” → ${wff('a is A')} (a general term takes a capital).<br>“Al is the tallest dentist” → ${wff('a is d')} — a definite description is a singular term, so a small letter, and “is” means identity.<br>“Al lives in Florida” → ${wff('a is F')} — “lives in Florida” is a general term; the capital letter comes from the place, not from “lives.”`,
   B:()=>`<b>Star test.</b><br>${wff('no P* is B*')}<br>${wff('some C is B')}<br>${wff(SYM.therefore+' some C* is not P')}<br><b>Valid</b>: every capital is starred exactly once and there is exactly one right-hand star.
   <br><br><b>Venn diagrams.</b> Shade an area you know is empty (for "no" and "all"); put an ✕ in an area you know is non-empty (for "some"):
   <div style="display:flex;flex-wrap:wrap;gap:16px;margin:8px 0 4px">
@@ -10732,16 +10795,20 @@ $('btnInfo').onclick=aboutView;
 $('btnHelp').onclick=helpView;
 $('startBtn').onclick=()=>{ if(!state.name) openModal(optForm(true)); else fileMenu(); };
 
-/* keyboard number shortcuts for MC; Enter confirms a Set R picklist selection */
+/* After an answer has been checked and "Next problem" is on screen, Enter
+   goes to the next problem (MC, typed, picklist, proofs, Show answer).
+   Number keys still pick MC/TF choices; Enter still confirms a Set R
+   picklist selection until the problem is finished. */
 document.addEventListener('keydown',e=>{
   if(overlay.classList.contains('show')) return;
+  if(enterGoesToNextProblem(e)){ e.preventDefault(); e.stopPropagation(); nextProblem(); return; }
   const p=session.current; if(!p) return;
   if(p.mode==='mc'||p.mode==='tf'){
     if(/^[1-9]$/.test(e.key)){ const i=parseInt(e.key,10)-1; if(i<p.choices.length) answerMC(i); }
   } else if(p.mode==='picklist' && e.key==='Enter' && session.pickSel!=null && !p.pickLocked){
     e.preventDefault(); answerPick();
   }
-});
+}, true);
 
 /* ---- boot ---- */
 updateScoreBar();

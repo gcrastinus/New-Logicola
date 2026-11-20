@@ -2313,7 +2313,9 @@ function starTestG(prem,concl,model){
   const caps=uniqStrings([...prem,concl].flatMap(s=>[s.a,s.b])).filter(c=>/[A-Z]/.test(c));
   if(right!==1) return false;
   if(caps.some(c=>!stars[c])) return false;
-  if(model==='traditional'){ const twice=caps.filter(c=>stars[c]===2).length; return caps.every(c=>stars[c]<=2) && twice<=1; }
+  // Traditional (Gensler's Aristotelian adaptation): every capital starred AT
+  // LEAST once; modern: EXACTLY once. Both: exactly one right-hand star.
+  if(model==='traditional') return caps.every(c=>stars[c]>=1);
   return caps.every(c=>stars[c]===1);
 }
 /* semantic validity for syllogisms with singular terms (bounded model check) —
@@ -2408,6 +2410,17 @@ function vennTarget(prem,letters){
   return {shaded:[...shaded].sort((a,b)=>a-b), xs:[...xs].sort((a,b)=>a-b)};
 }
 
+// Traditional (Aristotelian) Venn rule, after Gensler: "If you have a circle
+// with only one unshaded area, put an ✕ in this area" (the term isn't empty).
+// Returns the premise ✕s plus any such extra ✕s.
+function vennTradXs(target,letters){
+  const xs=new Set(target.xs), sh=new Set(target.shaded);
+  for(const L of letters){
+    const open=[]; for(let i=0;i<7;i++) if(inCircle(i,L,letters) && !sh.has(i)) open.push(i);
+    if(open.length===1) xs.add(open[0]);
+  }
+  return [...xs].sort((a,b)=>a-b);
+}
 /* ---- build a traditional (2-premise, capital-letter) categorical syllogism ---- */
 function makeSyll(o){
   o=o||{};
@@ -2451,7 +2464,7 @@ function bVerdict(s){
 }
 function starRuleText(model){
   return model==='traditional'
-    ? `Star premise letters that are distributed and conclusion letters that aren't. On the <b>traditional</b> model the argument is valid iff there's exactly one right-hand star, no capital is left unstarred, and every capital is starred once — except that <b>one</b> capital may be starred twice (that term is assumed non-empty).`
+    ? `Star premise letters that are distributed and conclusion letters that aren't. On the <b>traditional</b> model the argument is valid iff every capital is starred <b>at least once</b> and there's exactly one right-hand star (a capital starred twice is fine — every term is assumed non-empty).`
     : `Star premise letters that are distributed and conclusion letters that aren't. On the <b>modern</b> model the argument is valid iff every capital is starred exactly once and there's exactly one right-hand star.`;
 }
 function engStmt(st,map){
@@ -2561,7 +2574,7 @@ function bDerive(){
       const usedMid=(t.match(/[A-Z]/g)||[]).find(L=>middles.includes(L));
       if(usedMid) return `Your conclusion uses <b>${usedMid}</b>, which occurs twice in the premises — the middle term drops out. A valid conclusion uses the two letters that occur only <b>once</b>.`;
       if(NONE_RX.test(t.toLowerCase().replace(/[.!]$/,'')) && cands.length===1)
-        return `Something does follow here — run the star test: with the right conclusion, every capital gets starred exactly once and there's exactly one right-hand star.`;
+        return `Something does follow here — run the star test: with the right conclusion, every capital gets starred ${model==='traditional'?'at least once':'exactly once'} and there's exactly one right-hand star.`;
       if(cands.length!==1 && !NONE_RX.test(t.toLowerCase()))
         return `Check the star test on your conclusion — the rules break, and in fact <b>nothing</b> validly follows from these premises.`;
       return null;
@@ -2581,6 +2594,12 @@ function starReason(s){
   const caps=[...new Set([s.prem[0],s.prem[1],s.concl].flatMap(x=>[x.a,x.b]))].filter(c=>/[A-Z]/.test(c));
   const rt = right===1?'exactly one right-hand star':(right===0?'no right-hand star':right+' right-hand stars');
   const counts = caps.map(c=>`${c} is starred ${cnt[c]||0}×`).join(', ');
+  if(s.model==='traditional'){
+    // Gensler's Aristotelian adaptation: "at least once" instead of "exactly once"
+    const twice=caps.filter(c=>(cnt[c]||0)>=2);
+    const note = twice.length ? ` ${twice.join(' and ')} ${twice.length>1?'are':'is'} starred twice, which the traditional test allows (every term is assumed non-empty).` : '';
+    return `Starred:<br>${wff(starredLines(s))}<br>The traditional star test: each capital letter must be starred <b>at least once</b>, and there must be exactly one right-hand star. Here there is ${rt}, and ${counts}.${note} So this argument is ${bVerdict(s)}`;
+  }
   return `Starred:<br>${wff(starredLines(s))}<br>The star test: there is ${rt}, and ${counts}. So this argument is ${bVerdict(s)}`;
 }
 function mountStar(root,s,p,solution){
@@ -2633,7 +2652,7 @@ function bStar(){
   const s = Math.random()<0.4 ? makeSyllSingular(Math.random()<0.5) : makeSyll();
   const p={ setLine:`Set B — How to Star (${modelLabel(s.model)})`,
     prompt:`Star the letters, then say whether the argument is valid. Click each letter to toggle a star: star premise letters that are <b>distributed</b>, and conclusion letters that are <b>not distributed</b>. After you check the stars, you'll judge validity.`,
-    instr:`Distributed = a letter just after "all," or anywhere after "no" or "not." Then, on the ${modelLabel(s.model)} model, the argument is valid iff there's exactly one right-hand star${state.bImport==='traditional'?', no capital is unstarred, and at most one capital is starred twice':' and every capital is starred exactly once'}.`,
+    instr:`Distributed = a letter just after "all," or anywhere after "no" or "not." Then, on the ${modelLabel(s.model)} model, the argument is valid iff there's exactly one right-hand star${s.model==='traditional'?' and every capital is starred at least once':' and every capital is starred exactly once'}.`,
     mode:'custom', explain:()=>starReason(s) };
   p.mount=(root)=>mountStar(root,s,p,false);
   p.reveal=()=>mountStar($('customBody'),s,p,true);
@@ -2723,10 +2742,15 @@ function mountVenn(root,s,target,p,opts){
     tool=b.dataset.tool; root.querySelectorAll('#vennTools .toggle').forEach(x=>x.classList.remove('on')); b.classList.add('on');
   });
   draw();
+  // traditional model: the solution also carries Gensler's extra ✕ (a circle
+  // with only one unshaded area gets an ✕ there); a diagram with just the
+  // premise ✕s is still accepted.
+  const tradXs = trad ? vennTradXs(target,s.letters) : target.xs;
+  const xsOk = ()=> setEq(userXs,new Set(target.xs)) || (trad && setEq(userXs,new Set(tradXs)));
   function drawSolution(){
     userShaded.clear(); userXs.clear();
     target.shaded.forEach(i=>userShaded.add(i));
-    target.xs.forEach(i=>userXs.add(i));
+    tradXs.forEach(i=>userXs.add(i));
     judged=true; draw();
   }
   if(hard){
@@ -2734,7 +2758,7 @@ function mountVenn(root,s,target,p,opts){
     // diagram and the verdict are graded together.
     const judgeHard=(ans)=>{
       if(judged) return;
-      const okS=setEq(userShaded,new Set(target.shaded)), okX=setEq(userXs,new Set(target.xs));
+      const okS=setEq(userShaded,new Set(target.shaded)), okX=xsOk();
       const diagOk=okS&&okX, ansOk=ans===s.valid;
       if(diagOk&&ansOk){ judged=true; awardCorrect(`Diagram ✔ &nbsp; Verdict ✔<br>${p.explain()}`); return; }
       const parts=[];
@@ -2750,10 +2774,10 @@ function mountVenn(root,s,target,p,opts){
   }
   root.querySelector('#vennCheck').onclick=()=>{
     if(judged) return;
-    const okS=setEq(userShaded,new Set(target.shaded)), okX=setEq(userXs,new Set(target.xs));
+    const okS=setEq(userShaded,new Set(target.shaded)), okX=xsOk();
     if(okS&&okX){
       root.querySelector('#vennStep').innerHTML=`<div class="feedback info show" style="display:block">✔ The premises are on the diagram. Read the circles: ${trad
-        ? `does the diagram guarantee the conclusion — remembering that on the traditional account every term names something, so a circle shaded down to a single unshaded region must have that region occupied?`
+        ? `does the diagram guarantee the conclusion — remembering that on the traditional account every term names something, so a circle with only one unshaded area gets an ✕ in that area?`
         : `does drawing the premises <em>necessitate</em> the conclusion?`} So is the argument valid?
         <div class="rowbtns"><button class="primary" id="vv">Valid</button><button class="ghost" id="vi">Invalid</button></div></div>`;
       root.querySelector('#vennCheck').disabled=true;
@@ -2786,7 +2810,7 @@ function bVenn(){
   const trad=model==='traditional';
   const p={ setLine:`Set B — Venn Diagrams (${modelLabel(model)})`,
     prompt:`Diagram this argument's premises on the circles, then use the circles to tell whether it's valid.`,
-    instr:`Shade areas known to be empty (for "no" and "all"); put an ✕ in an area known to be non-empty (for "some"). The argument is valid iff the completed diagram guarantees the conclusion.${trad?` Traditional model: every term is assumed non-empty — if a circle has only one unshaded region left, that region counts as occupied.`:''} There is no diagram check — mark the circles, then press Valid or Invalid; your diagram and your verdict are graded together.`,
+    instr:`Shade areas known to be empty (for "no" and "all"); put an ✕ in an area known to be non-empty (for "some"). The argument is valid iff the completed diagram guarantees the conclusion.${trad?` Traditional model: every term is assumed non-empty — if a circle has only one unshaded area left, put an ✕ in that area.`:''} There is no diagram check — mark the circles, then press Valid or Invalid; your diagram and your verdict are graded together.`,
     mode:'custom', explain:()=>`In symbols: ${wff(symLines(s))}<br>This argument is ${bVerdict(s)}` };
   p.mount=(root)=>mountVenn(root,s,target,p,{hard});
   return p;
@@ -10607,7 +10631,7 @@ function aboutView(){
 }
 const INFO={
   A:`Wffs have eight forms: <b>all A is B</b>, <b>no A is B</b>, <b>some A is B</b>, <b>some A is not B</b>, <b>x is A</b>, <b>x is not A</b>, <b>x is y</b>, <b>x is not y</b>. Capital = general term, small = individual. After "all," use capital letters.`,
-  B:`<b>Star test:</b> star premise letters that are distributed and conclusion letters that aren't. Distributed = just after "all," or anywhere after "no" or "not."<br><br><b>Modern model</b> (no existential import): valid iff every capital is starred <em>exactly once</em> and there's exactly one right-hand star.<br><br><b>Traditional model</b> (existential import — every term assumed non-empty): keep "exactly one right-hand star" and "no capital left unstarred," but allow <em>one</em> capital to be starred twice. This validates the extra "strengthened" moods (e.g. from "all A is B" you may infer "some A is B"). Choose the model in Options.`,
+  B:`<b>Star test:</b> star premise letters that are distributed and conclusion letters that aren't. Distributed = just after "all," or anywhere after "no" or "not."<br><br><b>Modern model</b> (no existential import): valid iff every capital is starred <em>exactly once</em> and there's exactly one right-hand star.<br><br><b>Traditional model</b> (existential import — every term assumed non-empty): valid iff every capital is starred <em>at least once</em> (instead of "exactly once") and there's exactly one right-hand star. This validates the extra "strengthened" moods (e.g. from "all A is B" you may infer "some A is B"). Choose the model in Options.`,
   C:`Pick the correctly grouped wff. ${SYM.not} not · ${SYM.and} and · ${SYM.or} or · ${SYM.horseshoe} if-then · ${SYM.threebar} iff. Put "(" wherever you see "both," "either," or "if"; a comma groups the parts on either side of it. Idioms (hard set): "but/yet"=and, "unless"=or, "just if/iff"=${SYM.threebar}; part after "if"/"provided that" is the antecedent; part after "only if" is the consequent; "A is necessary for B"=(${SYM.not}A ${SYM.horseshoe} ${SYM.not}B); "sufficient"=(A ${SYM.horseshoe} B); "necessary and sufficient"=(A ${SYM.threebar} B).`,
   D:`Truth equivalences: AND true iff both parts true; OR true iff at least one true; ${SYM.horseshoe} false only for 1${SYM.horseshoe}0; ${SYM.threebar} true iff sides match; ${SYM.not} reverses. Simplify inside-out.`,
   E:`<b>The truth-assignment test</b> (this set's method, except for "find the conclusion"): <em>set each premise to 1 and the conclusion to 0; figure out the truth value of as many letters as possible; the argument is valid if and only if no possible way to assign 1 and 0 to the letters will keep the premises all 1 and the conclusion 0.</em><br><br>
@@ -10711,7 +10735,7 @@ function copiRulesHtml(){
 }
 const HELP_EX={
   A:()=>`“Every dentist is funny” → ${wff('all D is F')}.<br>“Al is an artist” → ${wff('a is A')} (a general term takes a capital).<br>“Al is the tallest dentist” → ${wff('a is d')} — a definite description is a singular term, so a small letter, and “is” means identity.<br>“Al lives in Florida” → ${wff('a is F')} — “lives in Florida” is a general term; the capital letter comes from the place, not from “lives.”`,
-  B:()=>`<b>Star test.</b><br>${wff('no P* is B*')}<br>${wff('some C is B')}<br>${wff(SYM.therefore+' some C* is not P')}<br><b>Valid</b>: every capital is starred exactly once and there is exactly one right-hand star.
+  B:()=>`<b>Star test.</b><br>${wff('no P* is B*')}<br>${wff('some C is B')}<br>${wff(SYM.therefore+' some C* is not P')}<br><b>Valid</b>: every capital is starred exactly once and there is exactly one right-hand star. (On the traditional model the rule is "at least once"; e.g. ${wff('all M* is P')}, ${wff('all M* is S')}, ${wff(SYM.therefore+' some S* is P*')} stars M twice and is valid only traditionally.)
   <br><br><b>Venn diagrams.</b> Shade an area you know is empty (for "no" and "all"); put an ✕ in an area you know is non-empty (for "some"):
   <div style="display:flex;flex-wrap:wrap;gap:16px;margin:8px 0 4px">
     <div style="text-align:center;font-size:12.5px">no A is B<br>${venn2(['lens'],[])}</div>

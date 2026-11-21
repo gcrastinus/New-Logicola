@@ -2977,6 +2977,7 @@ function dEval(opts){
     instr:`Substitute 1 and 0 for the letters, then simplify from the inside out. With "${SYM.not}(...)", first work out the part inside the parentheses, then apply "${SYM.not}" to the result — don't "distribute" the not.`,
     mode:'tf',
     choices: shuffle([{text:'True (1)',correct:val},{text:'False (0)',correct:!val}]),
+    noCreditAfterWrong:true,
     explain:()=>`With ${given}, the formula comes out <b>${val?'TRUE (1)':'FALSE (0)'}</b>.`
   };
 }
@@ -3081,9 +3082,10 @@ function dArgTable(opts){
     function askVerdict(){
       root.querySelector('#atStep').innerHTML=`<div class="feedback info show" style="display:block">✔ Table done. Now read it: is there any row with all premises 1 and conclusion 0? So — is the argument valid?
         <div class="rowbtns"><button class="primary" id="atV">Valid</button><button class="ghost" id="atI">Invalid</button></div></div>`;
+      let verdictMissed=false; // after a wrong Valid/Invalid the other one earns nothing
       const judge=(ans)=>{ if(judged) return;
-        if(ans===valid){ judged=true; awardCorrect(p.explain()); }
-        else penalizeWrong('Scan each row: the argument is invalid exactly when some row has every premise 1 and the conclusion 0.', p.explain()); };
+        if(ans===valid){ judged=true; awardCorrect(p.explain(), null, {noPoints:verdictMissed}); }
+        else{ verdictMissed=true; penalizeWrong('Scan each row: the argument is invalid exactly when some row has every premise 1 and the conclusion 0.', p.explain()); } };
       root.querySelector('#atV').onclick=()=>judge(true);
       root.querySelector('#atI').onclick=()=>judge(false);
     }
@@ -3151,6 +3153,7 @@ function eSym(opts){
     instr:`Set each premise to 1 and the conclusion to 0, and work out the letters' values. VALID = no possible assignment keeps the premises all 1 and the conclusion 0. If a letter's value isn't forced but matters, try it both ways.`,
     mode:'tf',
     choices: shuffle([{text:'Valid',correct:valid},{text:'Invalid',correct:!valid}]),
+    noCreditAfterWrong:true,
     explain:()=>eVerdict(prem,concl,valid)
   };
 }
@@ -3199,6 +3202,7 @@ function eEnglish(opts){
     instr:`First appraise it intuitively; then translate into symbols (same letter for the same idea) and apply the truth-assignment test. If your intuition clashes with the test, recheck both.`,
     mode:'tf',
     choices: shuffle([{text:'Valid',correct:s.valid},{text:'Invalid',correct:!s.valid}]),
+    noCreditAfterWrong:true,
     explain:()=>`In symbols: ${wff(s.prem.join(' &nbsp; '))} ${SYM.therefore} ${wff(s.concl)}<br>${eVerdict(s.prem,s.concl,s.valid)}` };
 }
 function eIdiom(opts){
@@ -3215,6 +3219,7 @@ function eIdiom(opts){
     instr:`Conclusion indicators: hence, thus, so, therefore. Premise indicators: since, for, because, after all. Reconstruct the argument, translate it, and apply the truth-assignment test.`,
     mode:'tf',
     choices: shuffle([{text:'Valid',correct:s.valid},{text:'Invalid',correct:!s.valid}]),
+    noCreditAfterWrong:true,
     explain:()=>`Reconstructed: ${wff(s.prem.join(' &nbsp; '))} ${SYM.therefore} ${wff(s.concl)}<br>${eVerdict(s.prem,s.concl,s.valid)}` };
 }
 /* ---- E: find the conclusion (idiomatic propositional paragraph) ---- */
@@ -5714,6 +5719,7 @@ function kGalactic(){
     instr:`Dropping a diamond from world W1 into new world W2 issues a reusable travel ticket W1 ⇒ W2. To drop a box from W1 into W2: <b>T</b> needs a ticket W1 ⇒ W2; <b>S4</b> also allows a series of tickets; <b>B</b> also allows single tickets backwards; <b>S5</b> needs no tickets. (Change the system in this set’s menu.)`,
     mode:'tf',
     choices: shuffle([{text:'Valid',correct:valid},{text:'Invalid',correct:!valid}]),
+    noCreditAfterWrong:true,
     explain:()=>`<b>${valid?'VALID':'INVALID'} in ${sys}</b> — this argument ${g.sys.length===4?'is valid in T, S4, B, and S5':'is valid only in '+g.sys.join(' and ')}; it ${g.why}.` };
 }
 /* ============================================================================
@@ -6165,6 +6171,7 @@ function mImp(){
     instr:`Imperatives aren't true or false, so here "valid" means: conjoining the premises with the contradictory of the conclusion is inconsistent. Treat "${A}u" (you're doing it) and "${impU(A)}" (do it) as different wffs. Watch don't-combine premises — they forbid a pair without saying which part to drop.`,
     mode:'tf',
     choices: shuffle([{text:'Valid',correct:s.valid},{text:'Invalid',correct:!s.valid}]),
+    noCreditAfterWrong:true,
     explain:()=>`<b>${s.valid?'VALID':'INVALID'}.</b> ${s.why}` };
 }
 function makeM(){
@@ -7355,6 +7362,7 @@ function genS_laws(opts){
     instr:`Test identities with a small example or a two-circle diagram in the scratch space. Watch the ${SS.in}/${SS.sub} distinction like a hawk.`,
     mode:'tf', noKeyboard:true, scratch:true,
     choices:[{text:'True',correct:it.v},{text:'False',correct:!it.v}],
+    noCreditAfterWrong:true,
     explain:()=>`${it.v?'True':'False'}. ${it.why}` };
 }
 const S_BASICS_FIXED=[

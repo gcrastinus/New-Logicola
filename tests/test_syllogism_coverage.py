@@ -1,4 +1,4 @@
-"""Set B syllogism coverage and the no-points-after-a-wrong-verdict rule.
+"""Set B syllogism coverage, and the no-points-after-a-wrong-verdict rule (Set B and the other true/false sets: D, E, K, M, S).
 
 Coverage: draws thousands of problems from makeSyll and makeSyllSingular in
 both models and checks that every valid mood/figure (15 modern, 24
@@ -140,6 +140,35 @@ with sync_playwright() as pw:
     # English and idiomatic arguments carry the same flag
     flags = pg.evaluate("()=>{state.bImport='modern'; return [bEnglish().noCreditAfterWrong, bIdiom().noCreditAfterWrong, bSym().noCreditAfterWrong];}")
     check('Set B symbolic, English and idiomatic valid/invalid all use the rule', all(flags), flags)
+
+    # ---------------- the same rule in the other true/false sets ----------------
+    OTHER = [('D', 'dEval({})', 'Set D truth evaluations'), ('E', 'eSym({})', 'Set E truth-assignment'),
+             ('E', 'eEnglish({})', 'Set E English'), ('E', 'eIdiom({})', 'Set E idiomatic'),
+             ('K', 'kGalactic()', 'Set K Galactic Travel'), ('M', 'mImp()', 'Set M imperative'),
+             ('S', 'genS_laws({})', 'Set S Laws')]
+    for setid, call, label in OTHER:
+        pg.goto(BASE); pg.wait_for_function('()=>typeof renderProblem==="function"')
+        corr = pg.evaluate("""([setid,call])=>{ const o=document.getElementById('overlay'); if(o) o.className='overlay';
+            state.name='T'; state.level=2; state.sound=false; session.set=setid; session.points=40; session.tries=0;
+            const p=eval(call); session.current=p; renderProblem();
+            return {flag:!!p.noCreditAfterWrong, n:p.choices.length, c:p.choices.map(c=>c.correct)}; }""", [setid, call])
+        check(f'{label}: binary, flagged', corr['flag'] and corr['n'] == 2, corr)
+        pg.click(f'.choice[data-i="{corr["c"].index(False)}"]'); pg.wait_for_timeout(100); p1 = pts()
+        pg.click(f'.choice[data-i="{corr["c"].index(True)}"]'); pg.wait_for_timeout(100); p2 = pts()
+        check(f'{label}: wrong -2, then right earns 0 (40->{p1}->{p2})', p1 == 38 and p2 == 38 and 'No points this time' in pg.inner_text('#fb'))
+    # Set D argument truth table: verdict after the table
+    pg.goto(BASE); pg.wait_for_function('()=>typeof dArgTable==="function"')
+    valid = pg.evaluate("""()=>{ const o=document.getElementById('overlay'); if(o) o.className='overlay';
+        state.name='T'; state.level=2; state.sound=false; session.set='D'; session.points=40; session.tries=0;
+        const p=dArgTable({}); session.current=p; renderProblem(); return /^<b>VALID/.test(p.explain()); }""")
+    pg.evaluate("()=>document.querySelectorAll('.ttcell').forEach(b=>b.click())")
+    for _ in range(2):
+        if pg.query_selector('#atV'): break
+        pg.click('#atCheck'); pg.wait_for_timeout(100)
+    p0 = pts()
+    pg.click('#atI' if valid else '#atV'); pg.wait_for_timeout(100); p1 = pts()
+    pg.click('#atV' if valid else '#atI'); pg.wait_for_timeout(100); p2 = pts()
+    check(f'Set D argument table verdict: wrong -2, then right earns 0 ({p0}->{p1}->{p2})', p1 == p0 - 2 and p2 == p1 and 'No points this time' in pg.inner_text('#fb'))
     check('no page errors', not errs, errs)
     br.close()
 

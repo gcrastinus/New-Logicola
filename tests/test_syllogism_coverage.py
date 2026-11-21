@@ -1,0 +1,147 @@
+"""Set B syllogism coverage and the no-points-after-a-wrong-verdict rule.
+
+Coverage: draws thousands of problems from makeSyll and makeSyllSingular in
+both models and checks that every valid mood/figure (15 modern, 24
+traditional) appears at a fair rate, that invalid problems lean toward tricky
+near misses (incl. the existential fallacy on the modern model), that every
+rule violation shows up, that obvious junk stays rare, and that the singular
+forms include every valid kind plus the classic tricky invalid ones.
+
+Scoring: on a Set B valid/invalid problem, a wrong click costs the usual
+points; clicking the right answer afterwards shows it but earns 0. A first-try
+right answer still earns +10. Optional screenshots of the sequence.
+
+Run a local server, then: python3 tests/test_syllogism_coverage.py [base] [shots-dir]
+"""
+import collections, os, sys
+from playwright.sync_api import sync_playwright
+
+BASE = sys.argv[1] if len(sys.argv) > 1 else 'http://127.0.0.1:8767/index.html'
+SHOTS = sys.argv[2] if len(sys.argv) > 2 else ''
+CHROME = '/usr/bin/google-chrome'
+N = 12000
+results = []
+def check(name, cond, info=''):
+    results.append((name, bool(cond)))
+    print(('PASS ' if cond else 'FAIL ') + name + (('  -- ' + str(info)) if info and not cond else ''))
+
+LET = {'all': 'A', 'no': 'E', 'some': 'I', 'somenot': 'O'}
+def dist(st, side): return {'all': side == 'a', 'no': True, 'some': False, 'somenot': side == 'b'}[st['t']]
+def classify(p, c, model='modern'):
+    S, P = c['a'], c['b']; M = ({p[0]['a'], p[0]['b'], p[1]['a'], p[1]['b']} - {S, P}).pop()
+    maj = [x for x in p if P in (x['a'], x['b'])][0]; mn = [x for x in p if x is not maj][0]
+    fig = {(True, False): 1, (False, False): 2, (True, True): 3, (False, True): 4}[(maj['a'] == M, mn['a'] == M)]
+    br = []
+    dp = lambda T: any(dist(x, 'a' if x['a'] == T else 'b') for x in p if T in (x['a'], x['b']))
+    if not dp(M): br.append('undistributed middle')
+    if dist(c, 'b') and not dp(P): br.append('illicit major')
+    if dist(c, 'a') and not dp(S): br.append('illicit minor')
+    neg = sum(x['t'] in ('no', 'somenot') for x in p); cneg = c['t'] in ('no', 'somenot')
+    if neg == 2: br.append('two negative premises')
+    elif neg == 1 and not cneg: br.append('affirmative conclusion, negative premise')
+    elif neg == 0 and cneg: br.append('negative conclusion, affirmative premises')
+    if model == 'modern' and all(x['t'] in ('all', 'no') for x in p) and c['t'] in ('some', 'somenot'): br.append('existential fallacy')
+    return LET[maj['t']] + LET[mn['t']] + LET[c['t']] + '-' + str(fig), br
+
+def canon(p, c):  # singular form up to renaming of letters
+    ren = {}
+    def r(x):
+        if x not in ren: ren[x] = ('XYZ' if x.isupper() else 'xyz')[sum(k.isupper() == x.isupper() for k in ren)]
+        return ren[x]
+    return ' / '.join(f"{st['t']} {r(st['a'])} {r(st['b'])}" for st in p + [c])
+
+with sync_playwright() as pw:
+    br = pw.chromium.launch(executable_path=CHROME, args=['--headless=new', '--no-sandbox', '--disable-gpu'])
+    pg = br.new_page(viewport={'width': 1000, 'height': 860})
+    errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
+    pg.goto(BASE)
+    pg.wait_for_function('()=>typeof makeSyll==="function" && typeof syllCatPools==="function"')
+
+    for model, nvalid in (('modern', 15), ('traditional', 24)):
+        res = pg.evaluate("""([n,model])=>{state.bImport=model; const r=[];
+            for(let i=0;i<n;i++){ const s=makeSyll(); r.push([s.prem,s.concl,s.valid,s.kind]); } return r;}""", [N, model])
+        vc, kinds, rules, nbreak = collections.Counter(), collections.Counter(), collections.Counter(), collections.Counter()
+        for p, c, v, k in res:
+            mf, b = classify(p, c, model)
+            if v: vc[mf] += 1
+            else:
+                kinds[k] += 1; nbreak[len(b)] += 1
+                for x in b: rules[x] += 1
+            if v and b: check(f'{model}: valid form {mf} breaks no rule', False, b)
+        nv = sum(vc.values()); ni = len(res) - nv
+        print(f'{model}: valid {nv}, invalid {ni}; valid mood-figures {len(vc)}; invalid kinds {dict(kinds)}; rules-broken histogram {dict(sorted(nbreak.items()))}')
+        check(f'{model}: all {nvalid} valid mood/figures appear', len(vc) == nvalid, sorted(vc))
+        lo = min(vc.values()) / (nv / nvalid)
+        check(f'{model}: each valid mood/figure within 25% of an even share (lowest {lo:.2f})', lo > 0.75)
+        check(f'{model}: about half the problems are valid', 0.45 < nv / len(res) < 0.55)
+        check(f'{model}: invalid problems are mostly near misses: one rule broken or existential (>=70%)', (kinds['near'] + kinds['exist']) / ni >= 0.70, dict(kinds))
+        check(f'{model}: obvious junk (3+ rules broken) under 5% of invalid', (sum(v for k, v in nbreak.items() if k >= 3)) / ni < 0.05, dict(nbreak))
+        want = {'undistributed middle', 'illicit major', 'illicit minor', 'two negative premises',
+                'affirmative conclusion, negative premise', 'negative conclusion, affirmative premises'}
+        if model == 'modern': want.add('existential fallacy')
+        check(f'{model}: every rule violation appears', want <= set(rules), sorted(want - set(rules)))
+        print(f'  {model} invalid problems by rule broken:', dict(rules.most_common()))
+        if model == 'modern':
+            check('modern: existential-fallacy forms (Darapti, Barbari, ...) ~20% of invalid', 0.15 < kinds['exist'] / ni < 0.27, kinds['exist'] / ni)
+        # Venn problems still find a deterministic diagram, both verdicts
+        vv = pg.evaluate("""(model)=>{state.bImport=model; let ok=0,v=0; for(let i=0;i<400;i++){ const s=makeSyll({deterministicVenn:true,wantValid:i%2===0,model});
+            if(vennTarget(s.prem,s.letters)) ok++; if(s.valid) v++; } return [ok,v];}""", model)
+        check(f'{model}: Venn generator gets deterministic diagrams with both verdicts', vv[0] == 400 and 150 < vv[1] < 250, vv)
+
+        # singular-term forms
+        sres = pg.evaluate("""([n,model])=>{const r=[]; for(let i=0;i<n;i++){ const s=makeSyllSingular(Math.random()<0.5,model);
+            r.push([s.prem,s.concl,s.valid,s.kind]); } return r;}""", [6000, model])
+        allv = pg.evaluate("""(model)=>[['a','F','G'],['a','b','F']].flatMap(t=>syllSingPools(model,t).valid.map(f=>[f.prem,f.concl]))""", model)
+        need = {canon(p, c) for p, c in allv}
+        seen_v = {canon(p, c) for p, c, v, k in sres if v}
+        check(f'{model}: every valid singular form appears ({len(need)} kinds)', need <= seen_v, sorted(need - seen_v)[:4])
+        seen_i = {canon(p, c) for p, c, v, k in sres if not v}
+        tricky = {
+            'affirming the consequent: x is Y; all X is Y; so x is X': 'is x X / all Y X / is x Y',
+            'denying the antecedent: x is not X; all X is Y; so x is not Y': 'isnot x X / all X Y / isnot x Y',
+            'two negatives: x is not X; no X is Y; so x is Y': 'isnot x X / no X Y / is x Y',
+            'some-middle: x is X; some X is Y; so x is Y': 'is x X / some X Y / is x Y',
+        }
+        for name, form in tricky.items():
+            check(f'{model}: tricky singular invalid appears — {name}', form in seen_i)
+        sk = collections.Counter(k for *_, v, k in sres if not v)
+        check(f'{model}: singular invalids mostly near misses', (sk['near'] + sk['exist']) / sum(sk.values()) >= 0.8, dict(sk))
+
+    # ---------------- scoring ----------------
+    BOOT = r"""(want) => {
+      const o=document.getElementById('overlay'); if(o) o.className='overlay';
+      state.name='T'; state.level=2; state.sound=false; state.bImport='modern'; state.bMode='sym';
+      session.set='B'; session.points=40; session.tries=0; session.lastAnswer=undefined;
+      let p; do{ p=bSym(); } while(/[a-z] is/.test(p.prompt.replace(/<[^>]+>/g,'')) || p.choices.find(c=>c.correct).text!==(want?'Valid':'Invalid'));
+      session.current=p; renderProblem(); return p.choices.map(c=>c.correct); }"""
+    def pts(): return pg.evaluate('()=>session.points')
+    for want in (True, False):
+        pg.goto(BASE); pg.wait_for_function('()=>typeof bSym==="function"')
+        corr = pg.evaluate(BOOT, want)
+        wrong_i, right_i = corr.index(False), corr.index(True)
+        p0 = pts()
+        tag = 'valid' if want else 'invalid'
+        if SHOTS: pg.screenshot(path=os.path.join(SHOTS, f'1-{tag}-start.png'), full_page=True)
+        pg.click(f'.choice[data-i="{wrong_i}"]'); pg.wait_for_timeout(150)
+        p1 = pts()
+        if SHOTS: pg.screenshot(path=os.path.join(SHOTS, f'2-{tag}-wrong.png'), full_page=True)
+        pg.click(f'.choice[data-i="{right_i}"]'); pg.wait_for_timeout(150)
+        p2 = pts(); fb = pg.inner_text('#fb')
+        if SHOTS: pg.screenshot(path=os.path.join(SHOTS, f'3-{tag}-right-after-wrong.png'), full_page=True)
+        check(f'answer {tag}: wrong click costs the usual points ({p0}->{p1})', p1 == p0 - 2)
+        check(f'answer {tag}: right click after a wrong one earns 0 ({p1}->{p2})', p2 == p1)
+        check(f'answer {tag}: feedback says right, no points', 'No points this time' in fb and 'Next problem' in fb, fb[:120])
+        check(f'answer {tag}: choices locked after the right answer', pg.evaluate("()=>[...document.querySelectorAll('.choice')].every(b=>b.onclick===null)"))
+    # first-try right still +10
+    pg.goto(BASE); pg.wait_for_function('()=>typeof bSym==="function"')
+    corr = pg.evaluate(BOOT, True); p0 = pts()
+    pg.click(f'.choice[data-i="{corr.index(True)}"]'); pg.wait_for_timeout(150)
+    check('first-try right answer still +10', pts() == p0 + 10, (p0, pts()))
+    # English and idiomatic arguments carry the same flag
+    flags = pg.evaluate("()=>{state.bImport='modern'; return [bEnglish().noCreditAfterWrong, bIdiom().noCreditAfterWrong, bSym().noCreditAfterWrong];}")
+    check('Set B symbolic, English and idiomatic valid/invalid all use the rule', all(flags), flags)
+    check('no page errors', not errs, errs)
+    br.close()
+
+print(f"\n{sum(ok for _, ok in results)}/{len(results)} passed")
+sys.exit(0 if all(ok for _, ok in results) else 1)

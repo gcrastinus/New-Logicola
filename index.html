@@ -1340,42 +1340,115 @@ function syllValidSem(prem,concl){
       if(prem.every(p=>tr(p,asg,cs)) && !tr(concl,asg,cs)) return false; } }
   return true;
 }
-/* singular-term syllogism templates (all valid by construction); the generator
-   flips the conclusion's polarity to also produce invalid ones. */
-function singularSyllPool(noIdent){
-  const [F,G]=sampleDistinct(['F','G','H','K','M','P','S'],2);
-  const [a,b]=sampleDistinct(['a','b','c','d','e','j'],2);
-  const pool=[
-    [{t:'is',a,b:F},{t:'all',a:F,b:G},{t:'is',a,b:G}],
-    [{t:'is',a,b:F},{t:'is',a,b:G},{t:'some',a:F,b:G}],
-    [{t:'is',a,b:F},{t:'no',a:F,b:G},{t:'isnot',a,b:G}],
-    [{t:'is',a,b:F},{t:'isnot',a,b:G},{t:'somenot',a:F,b:G}],
-    [{t:'all',a:F,b:G},{t:'isnot',a,b:G},{t:'isnot',a,b:F}],
-    [{t:'no',a:F,b:G},{t:'is',a,b:G},{t:'isnot',a,b:F}]
-  ];
-  if(!noIdent) pool.push([{t:'ident',a,b},{t:'is',a,b:F},{t:'is',a:b,b:F}],
-                         [{t:'is',a,b:F},{t:'isnot',a:b,b:F},{t:'identnot',a,b}]);
-  return pool;
+/* ---- Syllogism form pools (coverage + tricky invalids) ----
+   Every problem is drawn from the complete list of forms, not built at
+   random, so each valid mood/figure is equally likely and invalid forms lean
+   toward the tricky ones. Categorical forms are sorted by how many of the
+   traditional rules they break (undistributed middle, illicit major, illicit
+   minor, two negatives, negative premise/affirmative conclusion and the
+   reverse): a "near miss" breaks exactly one. On the modern model the
+   existential-fallacy forms (the nine moods valid only with existential
+   import, e.g. Darapti, Barbari) get their own share. Invalid mix: modern 20%
+   existential / 60% one rule / 17% two rules / 3% three or more; traditional
+   75% / 22% / 3%. Singular-term forms: a near miss is one small change away
+   from a valid form (one statement's quality or quantity, or its terms
+   swapped); invalid mix 85% near miss / 15% other. */
+// rules broken by a categorical form (premises A–B and B–C, conclusion A–C)
+function syllRuleBreaks(prem,concl){
+  const S=concl.a, P=concl.b, M=['A','B','C'].find(x=>x!==S&&x!==P);
+  const dp=T=>prem.some(st=>(st.a===T&&distributed(st,'a'))||(st.b===T&&distributed(st,'b')));
+  const neg=prem.filter(st=>st.t==='no'||st.t==='somenot').length, cneg=concl.t==='no'||concl.t==='somenot';
+  let n=0;
+  if(!dp(M)) n++;
+  if(distributed(concl,'b')&&!dp(P)) n++;
+  if(distributed(concl,'a')&&!dp(S)) n++;
+  if(neg===2) n++; else if(neg===1&&!cneg) n++; else if(neg===0&&cneg) n++;
+  return n;
+}
+const SYLL_ALT={all:['all','no','some','somenot'],no:['all','no','some','somenot'],some:['all','no','some','somenot'],somenot:['all','no','some','somenot'],
+  is:['is','isnot'],isnot:['is','isnot'],ident:['ident','identnot'],identnot:['ident','identnot']};
+function syllFormKey(prem,concl){ return [prem[0],prem[1],concl].map(x=>x.t+':'+x.a+x.b).join('|'); }
+function syllNeighbors(prem,concl){
+  const sts=[prem[0],prem[1],concl], out=[];
+  for(let i=0;i<3;i++){
+    const st=sts[i];
+    const vars=SYLL_ALT[st.t].filter(t=>t!==st.t).map(t=>({t,a:st.a,b:st.b}));
+    const sameCase=/[A-Z]/.test(st.a)===/[A-Z]/.test(st.b);
+    if(sameCase) vars.push({t:st.t,a:st.b,b:st.a});
+    vars.forEach(v=>{ const c=sts.slice(); c[i]=v; out.push(syllFormKey([c[0],c[1]],c[2])); });
+  }
+  return out;
+}
+// forms: [{prem,concl,vm,vt}] -> pools for one model
+function syllPools(forms,model){
+  const trad=model==='traditional', ok=f=>trad?f.vt:f.vm;
+  const validKeys=new Set(forms.filter(ok).map(f=>syllFormKey(f.prem,f.concl)));
+  const P={valid:[],exist:[],near:[],two:[],other:[]};
+  forms.forEach(f=>{
+    if(ok(f)) P.valid.push(f);
+    else if(!trad && f.vt) P.exist.push(f);
+    else if(f.breaks!==undefined) (f.breaks<=1?P.near:f.breaks===2?P.two:P.other).push(f);
+    else if(syllNeighbors(f.prem,f.concl).some(k=>validKeys.has(k))) P.near.push(f);
+    else P.other.push(f);
+  });
+  return P;
+}
+function pickSyllForm(P,want,model){
+  if(want) return {f:pick(P.valid),kind:'valid'};
+  let r=Math.random();
+  if(model!=='traditional' && P.exist.length){ if(r<0.20) return {f:pick(P.exist),kind:'exist'}; r=(r-0.20)/0.80; }
+  const mix = P.two.length ? [['near',0.75],['two',0.97],['other',1]] : [['near',0.85],['other',1]];
+  for(const [k,cut] of mix) if(r<cut && P[k].length) return {f:pick(P[k]),kind:k};
+  return {f:pick(P.near),kind:'near'};
+}
+const _syllPoolCache={};
+// the 512 A/B/C forms: premises A–B and B–C, conclusion A–C, any order
+function syllCatPools(model){
+  const k='cat:'+model; if(_syllPoolCache[k]) return _syllPoolCache[k];
+  const L=['A','B','C'], K=['all','no','some','somenot'], forms=[];
+  for(const [a1,b1] of [['A','B'],['B','A']]) for(const [a2,b2] of [['B','C'],['C','B']]) for(const [ac,bc] of [['A','C'],['C','A']])
+    for(const t1 of K) for(const t2 of K) for(const t3 of K){
+      const prem=[{t:t1,a:a1,b:b1},{t:t2,a:a2,b:b2}], concl={t:t3,a:ac,b:bc};
+      forms.push({prem,concl,vm:catValid(prem,concl,L),vt:catValidTrad(prem,concl,L),breaks:syllRuleBreaks(prem,concl)});
+    }
+  return (_syllPoolCache[k]=syllPools(forms,model));
+}
+// every singular-term syllogism over {a,F,G} (one name) or {a,b,F} (two
+// names, uses identity): three statements, each term exactly twice, and the
+// conclusion doesn't repeat a premise's pair of terms.
+function syllSingPools(model,terms){
+  const k='sing:'+model+':'+terms.join(''); if(_syllPoolCache[k]) return _syllPoolCache[k];
+  const wffs=[];
+  terms.forEach(x=>terms.forEach(y=>{ if(x===y) return;
+    const X=/[A-Z]/.test(x), Y=/[A-Z]/.test(y);
+    const ts = X&&Y ? ['all','no','some','somenot'] : (!X&&Y ? ['is','isnot'] : (!X&&!Y ? ['ident','identnot'] : []));
+    ts.forEach(t=>wffs.push({t,a:x,b:y})); }));
+  const forms=[];
+  const pair=st=>[st.a,st.b].sort().join('');
+  for(const p1 of wffs) for(const p2 of wffs) for(const c of wffs){
+    const occ={}; [p1,p2,c].forEach(st=>{ occ[st.a]=(occ[st.a]||0)+1; occ[st.b]=(occ[st.b]||0)+1; });
+    if(Object.keys(occ).length!==terms.length || Object.values(occ).some(v=>v!==2)) continue;
+    if(pair(c)===pair(p1)||pair(c)===pair(p2)) continue;
+    forms.push({prem:[p1,p2],concl:c,vm:starTestG([p1,p2],c,'modern'),vt:starTestG([p1,p2],c,'traditional')});
+  }
+  return (_syllPoolCache[k]=syllPools(forms,model));
 }
 function makeSyllSingular(want,model,noIdent){
   model=model||state.bImport||'modern';
-  for(let tries=0;tries<300;tries++){
-    const tpl=pick(singularSyllPool(noIdent));
-    const prem=[Object.assign({},tpl[0]),Object.assign({},tpl[1])];
-    const concl=Object.assign({},tpl[2]);
-    if(Math.random()<0.5){ const c=concl;   // flip polarity to diversify validity
-      c.t = c.t==='is'?'isnot':c.t==='isnot'?'is':c.t==='some'?'somenot':c.t==='somenot'?'some':c.t==='ident'?'identnot':'ident'; }
-    const vm=starTestG(prem,concl,'modern'), vt=starTestG(prem,concl,'traditional');
-    const v=model==='traditional'?vt:vm;
-    if(v===want || tries>250){
-      const caps=uniqStrings([...prem,concl].flatMap(x=>[x.a,x.b]).filter(c=>/[A-Z]/.test(c)));
-      const smalls=uniqStrings([...prem,concl].flatMap(x=>[x.a,x.b]).filter(c=>/[a-z]/.test(c)));
-      const words=sampleDistinct(CATS,Math.max(1,caps.length)), names=sampleDistinct(NAMES,Math.max(1,smalls.length));
-      const map={}; caps.forEach((c,i)=>map[c]=words[i]); smalls.forEach((sm,i)=>map[sm]={nm:names[i].nm});
-      return {prem,concl,letters:caps,validModern:vm,validTrad:vt,model,valid:v,map,singular:true};
-    }
-  }
-  return makeSyll({model,wantValid:want});
+  if(want===undefined) want=Math.random()<0.5;
+  const twoNames = !noIdent && Math.random()<0.25;
+  const P=syllSingPools(model, twoNames?['a','b','F']:['a','F','G']);
+  const {f,kind}=pickSyllForm(P,want,model);
+  const [F,G]=sampleDistinct(['F','G','H','K','M','P','S'],2);
+  const [a,b]=sampleDistinct(['a','b','c','d','e','j'],2);
+  const ren={a,b,F,G}, cp=st=>({t:st.t,a:ren[st.a],b:ren[st.b]});
+  const prem=[cp(f.prem[0]),cp(f.prem[1])], concl=cp(f.concl);
+  const v=model==='traditional'?f.vt:f.vm;
+  const caps=uniqStrings([...prem,concl].flatMap(x=>[x.a,x.b]).filter(c=>/[A-Z]/.test(c)));
+  const smalls=uniqStrings([...prem,concl].flatMap(x=>[x.a,x.b]).filter(c=>/[a-z]/.test(c)));
+  const words=sampleDistinct(CATS,Math.max(1,caps.length)), names=sampleDistinct(NAMES,Math.max(1,smalls.length));
+  const map={}; caps.forEach((c,i)=>map[c]=words[i]); smalls.forEach((sm,i)=>map[sm]={nm:names[i].nm});
+  return {prem,concl,letters:caps,validModern:f.vm,validTrad:f.vt,model,valid:v,map,singular:true,kind};
 }
 /* ---- Venn region model (used by generator + interactive diagram) ---- */
 // region i -> [inCircle0, inCircle1, inCircle2] over letters order
@@ -1423,24 +1496,20 @@ function vennTradXs(target,letters){
 function makeSyll(o){
   o=o||{};
   const model=o.model||state.bImport||'modern';
-  const letters=['A','B','C']; const types=['all','no','some','somenot'];
-  const orient=(x,y)=>Math.random()<0.5?[x,y]:[y,x];
+  const letters=['A','B','C'];
   const want=(o.wantValid!==undefined)?o.wantValid:(Math.random()<0.5);
-  const build=()=>{
-    const [a1,b1]=orient('A','B'),[a2,b2]=orient('B','C'),[ac,bc]=orient('A','C');
-    const prem=[{t:pick(types),a:a1,b:b1},{t:pick(types),a:a2,b:b2}];
-    const concl={t:pick(types),a:ac,b:bc};
-    const validModern=catValid(prem,concl,letters), validTrad=catValidTrad(prem,concl,letters);
-    return {prem,concl,letters,validModern,validTrad,model,valid:(model==='traditional'?validTrad:validModern)};
-  };
+  const P=syllCatPools(model);
+  const make=()=>{ const {f,kind}=pickSyllForm(P,want,model);
+    const cp=st=>({t:st.t,a:st.a,b:st.b});
+    return {prem:[cp(f.prem[0]),cp(f.prem[1])],concl:cp(f.concl),letters,validModern:f.vm,validTrad:f.vt,model,
+      valid:(model==='traditional'?f.vt:f.vm),kind}; };
   let best=null;
   for(let t=0;t<600;t++){
-    const s=build();
-    if(s.valid!==want) continue;
+    const s=make();
     if(o.deterministicVenn && !vennTarget(s.prem,letters)) continue;
     best=s; break;
   }
-  if(!best) best=build();
+  if(!best) best=make();
   const words=sampleDistinct(CATS,3);
   best.map={A:words[0],B:words[1],C:words[2]};
   return best;
@@ -1500,6 +1569,7 @@ function bSym(){
     instr: starRuleText(s.model),
     mode:'tf',
     choices: shuffle([{text:'Valid',correct:s.valid},{text:'Invalid',correct:!s.valid}]),
+    noCreditAfterWrong:true,
     explain:()=>`Starred:<br>${wff(starredLines(s))}<br>This argument is ${bVerdict(s)}` };
 }
 /* ---- B: English arguments ---- */
@@ -1511,6 +1581,7 @@ function bEnglish(){
     instr:`Translate to symbols (same letter for the same idea, different letters for different ideas), then apply the ${modelLabel(s.model)} star test.`,
     mode:'tf',
     choices: shuffle([{text:'Valid',correct:s.valid},{text:'Invalid',correct:!s.valid}]),
+    noCreditAfterWrong:true,
     explain:()=>`In symbols: ${wff(symLines(s))}<br>Starred: ${wff(starredLines(s))}<br>This argument is ${bVerdict(s)}` };
 }
 /* ---- B: idiomatic arguments ---- */
@@ -1530,6 +1601,7 @@ function bIdiom(){
     instr:`Conclusion indicators: hence, thus, so, therefore, must. Premise indicators: since, for, because. Reconstruct the argument and apply the ${modelLabel(s.model)} star test.`,
     mode:'tf',
     choices: shuffle([{text:'Valid',correct:s.valid},{text:'Invalid',correct:!s.valid}]),
+    noCreditAfterWrong:true,
     explain:()=>`Reconstructed: ${wff(symLines(s))}<br>This argument is ${bVerdict(s)}` };
 }
 /* ---- B: deriving conclusions ---- */
@@ -1754,11 +1826,13 @@ function mountVenn(root,s,target,p,opts){
   if(hard){
     // Harder: no diagram check — mark the circles, then call it. Both the
     // diagram and the verdict are graded together.
+    let verdictMissed=false; // a wrong Valid/Invalid earlier: the other one earns nothing
     const judgeHard=(ans)=>{
       if(judged) return;
       const okS=setEq(userShaded,new Set(target.shaded)), okX=xsOk();
       const diagOk=okS&&okX, ansOk=ans===s.valid;
-      if(diagOk&&ansOk){ judged=true; awardCorrect(`Diagram ✔ &nbsp; Verdict ✔<br>${p.explain()}`); return; }
+      if(diagOk&&ansOk){ judged=true; awardCorrect(`Diagram ✔ &nbsp; Verdict ✔<br>${p.explain()}`, null, {noPoints:verdictMissed}); return; }
+      if(!ansOk) verdictMissed=true;
       const parts=[];
       parts.push(diagOk?'Diagram ✔.':(!okS&&!okX?'Diagram ✗ — check both the shading and the ✕.'
         :(!okS?'Diagram ✗ — the shading (for "no"/"all") is off.':'Diagram ✗ — the ✕ (for "some") is misplaced.')));
@@ -1794,7 +1868,7 @@ function mountVenn(root,s,target,p,opts){
   };
   function judge(ans){
     if(judged) return; judged=true;
-    if(ans===s.valid){ awardCorrect(p.explain()); }
+    if(ans===s.valid){ awardCorrect(p.explain(), null, {noPoints:session.tries>0}); }
     else { judged=false; penalizeWrong(trad
       ? `Look again — with every term assumed non-empty, does the completed diagram guarantee "${engStmt(s.concl,s.map)}"?`
       : `Look again — is the conclusion "${engStmt(s.concl,s.map)}" automatically drawn once the premises are on the diagram?`, p.explain()); }
@@ -9301,13 +9375,18 @@ function enterGoesToNextProblem(e){
   if(overlay&&overlay.classList.contains('show')) return false;
   return !!visibleNextProblemButton();
 }
-function awardCorrect(explainHtml, praise){
+/* opts.noPoints: right answer, but no points (a valid/invalid choice made
+   after the other one was already marked wrong — only one choice was left). */
+function awardCorrect(explainHtml, praise, opts){
+  const noPts=!!(opts&&opts.noPoints);
   tlog('c',{a:session.lastAnswer,n:session.tries||0}); session.lastAnswer=undefined;
   beep('good');
   const fb=$('fb'); if(!fb) return;
   fb.className='feedback ok show';
-  fb.innerHTML=`✅ <b>${praise||pick(['Correct!','Right!','Good!','Nicely done!','Yes!'])}</b> +${pointsForRight()} points. ${explainHtml||''}${nextBtn()}`;
-  session.points += (state.level>0?pointsForRight():10);
+  fb.innerHTML = noPts
+    ? `✅ <b>Right — that's the answer.</b> No points this time, since it was the only choice left after the wrong one. ${explainHtml||''}${nextBtn()}`
+    : `✅ <b>${praise||pick(['Correct!','Right!','Good!','Nicely done!','Yes!'])}</b> +${pointsForRight()} points. ${explainHtml||''}${nextBtn()}`;
+  if(!noPts) session.points += (state.level>0?pointsForRight():10);
   updateScoreBar();
   if(session.points>=100) completeSet();
   else focusNextProblem();
@@ -9336,7 +9415,9 @@ window.answerMC=function(i){
   const c=p.choices[i];
   if(!btns[i]||btns[i].classList.contains('bad')||btns[i].classList.contains('good')) return;
   session.lastAnswer=plainText(c.text).slice(0,80);
-  if(c.correct){ btns[i].classList.add('good'); disableChoices(false); awardCorrect(p.explain?p.explain():''); }
+  if(c.correct){ btns[i].classList.add('good'); disableChoices(false);
+    // syllogism valid/invalid: after a wrong pick the other answer earns nothing
+    awardCorrect(p.explain?p.explain():'', null, {noPoints: !!p.noCreditAfterWrong && session.tries>0}); }
   else{
     btns[i].classList.add('bad');
     // diagnosis of the specific wrong choice, when available (LogiCola-style)

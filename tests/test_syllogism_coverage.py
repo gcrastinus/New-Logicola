@@ -7,6 +7,11 @@ near misses (incl. the existential fallacy on the modern model), that every
 rule violation shows up, that obvious junk stays rare, and that the singular
 forms include every valid kind plus the classic tricky invalid ones.
 
+Singular-term mix: simulated sets of the English and letter-form generators
+(bEnglish, bSym, bStar) must keep at least 60% of items with no singular
+term, at most 40% with any singular term, at most 15% (never above 20%)
+with more than one, and must not place singular-term items back to back.
+
 Scoring: on a Set B valid/invalid problem, a wrong click costs the usual
 points; clicking the right answer afterwards shows it but earns 0. A first-try
 right answer still earns +10. Optional screenshots of the sequence.
@@ -106,6 +111,64 @@ with sync_playwright() as pw:
             check(f'{model}: tricky singular invalid appears — {name}', form in seen_i)
         sk = collections.Counter(k for *_, v, k in sres if not v)
         check(f'{model}: singular invalids mostly near misses', (sk['near'] + sk['exist']) / sum(sk.values()) >= 0.8, dict(sk))
+
+    # ---------------- singular-term mix in generated sets ----------------
+    # A clean 100-point run is 10 problems; misses make a set longer. Caps:
+    # >=60% with no singular term, <=40% with any, <=15% (never >20%) with
+    # more than one; no back-to-back singular items. Applies to symbolic
+    # (letters), English, and the letter-form star drill.
+    src = pg.evaluate("()=>[String(bSym),String(bEnglish),String(bStar)].join('\\n')")
+    check('bSym, bEnglish and bStar all draw through makeBSyll',
+          "makeBSyll({planKey:'sym'})" in src and "makeBSyll({planKey:'english'" in src and "makeBSyll({planKey:'star'})" in src,
+          src[:240])
+    MIX_JS = """([nSets, setLen, key, noIdent])=>{
+      const count=s=>{const t=new Set(); [...s.prem,s.concl].forEach(st=>{
+        if(/[a-z]/.test(st.a)) t.add(st.a); if(/[a-z]/.test(st.b)) t.add(st.b); }); return t.size; };
+      const overall={none:0,one:0,multi:0}; const sets=[]; let adj=0, pairs=0;
+      let nValid=0, nInvalid=0;
+      for(let si=0;si<nSets;si++){
+        session.syllPlan=null;
+        const kinds=[];
+        for(let i=0;i<setLen;i++){
+          const s=makeBSyll({planKey:key, noIdent});
+          const n=count(s);
+          const k=n===0?'none':(n===1?'one':'multi');
+          kinds.push(k); overall[k]++;
+          if(s.valid) nValid++; else nInvalid++;
+          if(i>0){ pairs++; if(kinds[i-1]!=='none' && k!=='none') adj++; }
+        }
+        const c={none:0,one:0,multi:0}; kinds.forEach(k=>c[k]++);
+        sets.push({none:c.none, one:c.one, multi:c.multi, any:c.one+c.multi});
+      }
+      return {overall, adj, pairs, sets, nSets, setLen, nValid, nInvalid};
+    }"""
+    for key, noIdent, label in (('sym', False, 'symbolic (letters)'),
+                                ('english', True, 'English'),
+                                ('star', False, 'star drill')):
+        for setLen in (10, 16, 20):
+            nSets = 200 if setLen==10 else 120
+            d = pg.evaluate(MIX_JS, [nSets, setLen, key, noIdent])
+            tot = d['nSets'] * d['setLen']
+            none = d['overall']['none'] / tot
+            one = d['overall']['one'] / tot
+            multi = d['overall']['multi'] / tot
+            anyp = one + multi
+            print(f'AFTER {label}, {d["nSets"]} sets of {setLen}: none={none:.1%} one={one:.1%} multi={multi:.1%} any={anyp:.1%}; adjacent singular pairs={d["adj"]}; valid={d["nValid"]} invalid={d["nInvalid"]}')
+            bad_none = sum(1 for s in d['sets'] if s['none']/setLen < 0.60)
+            bad_any = sum(1 for s in d['sets'] if s['any']/setLen > 0.40)
+            bad_m15 = sum(1 for s in d['sets'] if s['multi']/setLen > 0.15)
+            bad_m20 = sum(1 for s in d['sets'] if s['multi']/setLen > 0.20)
+            check(f'{label}, {setLen}-problem sets: every set has ≥60% with no singular term', bad_none==0, bad_none)
+            check(f'{label}, {setLen}-problem sets: no set has >40% with a singular term', bad_any==0, bad_any)
+            check(f'{label}, {setLen}-problem sets: no set has >15% with more than one singular term', bad_m15==0, bad_m15)
+            check(f'{label}, {setLen}-problem sets: never above 20% multi-singular', bad_m20==0, bad_m20)
+            check(f'{label}, {setLen}-problem sets: no back-to-back singular-term items', d['adj']==0, d['adj'])
+            if setLen==10:
+                check(f'{label}, 10-problem sets: overall none in the 60–75% band (using the budget)', 0.60 <= none <= 0.75, none)
+                check(f'{label}, 10-problem sets: still a mix of valid and invalid', 0.35 < d['nValid']/tot < 0.65, (d['nValid'], d['nInvalid']))
+        if noIdent:
+            # measured on the last (20-problem) batch
+            check(f'{label}: English-style generation never uses two singular terms', d['overall']['multi']==0, d['overall'])
 
     # ---------------- scoring ----------------
     BOOT = r"""(want) => {

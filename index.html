@@ -1433,10 +1433,10 @@ function syllSingPools(model,terms){
   }
   return (_syllPoolCache[k]=syllPools(forms,model));
 }
-function makeSyllSingular(want,model,noIdent){
+function makeSyllSingular(want,model,noIdent,nNames){
   model=model||state.bImport||'modern';
   if(want===undefined) want=Math.random()<0.5;
-  const twoNames = !noIdent && Math.random()<0.25;
+  const twoNames = nNames===2 ? true : nNames===1 ? false : (!noIdent && Math.random()<0.25);
   const P=syllSingPools(model, twoNames?['a','b','F']:['a','F','G']);
   const {f,kind}=pickSyllForm(P,want,model);
   const [F,G]=sampleDistinct(['F','G','H','K','M','P','S'],2);
@@ -1560,10 +1560,51 @@ function starMarkup(st,isConcl){
 function starredLines(s){ return `${starMarkup(s.prem[0],false)}<br>${starMarkup(s.prem[1],false)}<br>${SYM.therefore} ${starMarkup(s.concl,true)}`; }
 function lc(s){ return s.charAt(0).toLowerCase()+s.slice(1); }
 
+/* ---- B: singular-term quota -----------------------------------------------
+   A scored set is 100 points, 10 a right answer, so a clean run is 10
+   problems. Each activity keeps a running count and fills decades of 10:
+     at least 6 with no singular term (60%),
+     at most 4 with any singular term (40%),
+     at most 1 with more than one singular term (10%, under the 15% cap;
+       never above 20%).
+   Singular items are never placed back-to-back. English arguments never
+   use two names (no identity), so they have no "multi" items. The same
+   caps are kept for longer runs (misses make a set take more than 10). */
+const SYLL_DECADE_ANY=4, SYLL_DECADE_MULTI=1; // of 10
+function nextSyllKind(key,allowMulti){
+  if(!session.syllPlan) session.syllPlan={};
+  const rec=session.syllPlan[key]||(session.syllPlan[key]={none:0,one:0,multi:0,last:null});
+  const n=rec.none+rec.one+rec.multi, pos=n%10, left=10-pos, decade=Math.floor(n/10);
+  const haveAny=(rec.one+rec.multi)-SYLL_DECADE_ANY*decade;
+  const haveMulti=rec.multi-SYLL_DECADE_MULTI*decade;
+  const needAny=SYLL_DECADE_ANY-haveAny;
+  const needMulti=allowMulti?Math.max(0,SYLL_DECADE_MULTI-haveMulti):0;
+  const lastSing=rec.last==='one'||rec.last==='multi';
+  const maxIn=k=>Math.ceil(k/2);
+  const nxt=n+1;
+  const anyOk=(rec.one+rec.multi+1)/nxt<=0.40;
+  const multiOk=allowMulti && (rec.multi+1)/nxt<=0.15;
+  let useSing=false;
+  if(!lastSing && needAny>0 && anyOk){
+    if(needAny>maxIn(left-1)) useSing=true;
+    else if(Math.random()<needAny/left) useSing=true;
+  }
+  let kind='none';
+  if(useSing) kind=(needMulti>0 && multiOk && Math.random()<needMulti/needAny)?'multi':'one';
+  rec[kind]++; rec.last=kind;
+  return kind;
+}
+function makeBSyll(o){
+  o=o||{};
+  const allowMulti=!o.noIdent;
+  const kind=nextSyllKind(o.planKey||'default', allowMulti);
+  if(kind==='none') return makeSyll(o);
+  return makeSyllSingular(o.wantValid, o.model, o.noIdent||kind==='one', kind==='multi'?2:1);
+}
 /* ---- B: symbolic arguments (star test) ---- */
 function bSym(){
-  // about half include singular-term syllogisms (small letters)
-  const s = Math.random()<0.5 ? makeSyllSingular(Math.random()<0.5) : makeSyll();
+  // quota: most problems stay purely categorical; singulars are spaced out
+  const s = makeBSyll({planKey:'sym'});
   return { setLine:`Set B — Symbolic Arguments (star test · ${modelLabel(s.model)})`, scratch:true,
     prompt:`Is this argument valid?<br><br><span class="wff argblock">${symLines(s)}</span>`,
     instr: starRuleText(s.model),
@@ -1574,8 +1615,8 @@ function bSym(){
 }
 /* ---- B: English arguments ---- */
 function bEnglish(){
-  // about half include singular statements (named individuals)
-  const s = Math.random()<0.5 ? makeSyllSingular(Math.random()<0.5, null, true) : makeSyll();
+  // same quota as symbolic; English has no identity, so at most one name
+  const s = makeBSyll({planKey:'english', noIdent:true});
   return { setLine:`Set B — English Arguments (${modelLabel(s.model)})`, scratch:true,
     prompt:`Is this argument valid?<br><br><span class="wff argblock">${engLines(s)}</span>`,
     instr:`Translate to symbols (same letter for the same idea, different letters for different ideas), then apply the ${modelLabel(s.model)} star test.`,
@@ -1718,8 +1759,8 @@ function mountStar(root,s,p,solution){
   };
 }
 function bStar(){
-  // single level: all standard wff forms, categorical and singular (no translating)
-  const s = Math.random()<0.4 ? makeSyllSingular(Math.random()<0.5) : makeSyll();
+  // same singular-term quota as the other letter-form syllogism drills
+  const s = makeBSyll({planKey:'star'});
   const p={ setLine:`Set B — How to Star (${modelLabel(s.model)})`,
     prompt:`Star the letters, then say whether the argument is valid. Click each letter to toggle a star: star premise letters that are <b>distributed</b>, and conclusion letters that are <b>not distributed</b>. After you check the stars, you'll judge validity.`,
     instr:`Distributed = a letter just after "all," or anywhere after "no" or "not." Then, on the ${modelLabel(s.model)} model, the argument is valid iff there's exactly one right-hand star${s.model==='traditional'?' and every capital is starred at least once':' and every capital is starred exactly once'}.`,
@@ -9249,7 +9290,7 @@ function openSetMenu(id){
   });
 }
 window.startSet=function(id){
-  session.set=id; session.points=0; session.current=null;
+  session.set=id; session.points=0; session.current=null; session.syllPlan=null;
   tlog('S');
   closeModal(); updateScoreBar(); nextProblem();
 };
@@ -9566,7 +9607,7 @@ function completeSet(){
       <button class="ghost" onclick="closeModal();fileMenu()">Another exercise</button>
     </div>`);
 }
-window.restartSet=function(){ closeModal(); session.points=0; nextProblem(); };
+window.restartSet=function(){ closeModal(); session.points=0; session.syllPlan=null; nextProblem(); };
 
 /* ---- scores view ---- */
 function scoresView(){

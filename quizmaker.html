@@ -1208,6 +1208,27 @@ $('printBtn').onclick = () => window.print();
   button.ttcell:hover{background:var(--btnh)}
   /* probability visuals */
   .probviz{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin:12px 0 2px}
+  .psteps{margin:8px 0 4px}
+  .pstep{margin:12px 0 4px}
+  .pstep-q{font-weight:600;margin:0 0 8px}
+  .pstep .answerbox{max-width:420px}
+  .pwork{margin:8px 0 2px;line-height:1.55;font-variant-numeric:tabular-nums}
+  .pfrac{display:inline-flex;flex-direction:column;align-items:center;margin:2px 0}
+  .pfrac span:first-child{border-bottom:1.5px solid currentColor;padding:0 4px 2px}
+  .pfrac span:last-child{padding-top:2px}
+  .pallknow{display:inline-block;margin:10px 0 2px;padding:6px 12px;border:1.5px solid var(--line,#999);border-radius:8px;font-weight:600}
+  .pcombos{display:inline-grid;grid-template-columns:repeat(4,auto);gap:2px 14px;margin:10px 0 2px;padding:8px 12px;border:1px solid var(--line,#999);border-radius:8px;font-family:ui-monospace,Menlo,monospace}
+  .pcombos-h{grid-column:1/-1;font-family:inherit;font-weight:600;font-size:13px}
+  .pbet{margin:10px 0 0}
+  .poptions{display:grid;gap:10px;margin:8px 0}
+  .poptions>div{padding:8px 12px;border:1px solid var(--line,#999);border-radius:8px;line-height:1.5}
+  .pverdict{margin:8px 0 0;font-size:1.05em}
+  .pargument{line-height:1.6;margin:4px 0}
+  .pformwrap{margin:6px 0}
+  .pform{border-collapse:collapse;margin:8px 0}
+  .pform td{padding:1px 10px 1px 0;vertical-align:top}
+  .pform .pform-n{font-weight:600;padding-right:16px}
+  .pflaw{margin-top:6px;font-weight:600}
   .pcard{width:46px;height:64px;background:#fdfdf6;border-radius:6px;border:1px solid #999;display:flex;flex-direction:column;justify-content:space-between;padding:4px 6px;color:#111;font-weight:700;box-shadow:0 2px 5px rgba(0,0,0,.35)}
   .pcard .tr{font-size:12px;line-height:1.1}.pcard .mid{text-align:center;font-size:19px;line-height:1}.pcard .br{font-size:12px;transform:rotate(180deg);line-height:1.1}
   .pcard.red{color:#c22}
@@ -6598,6 +6619,170 @@ function genN(opts){
     explain:()=>`Answer: ${wff(it.ans)}.${it.note?' '+it.note:''}` };
 }
 /* ---- Set O: belief proofs ---- */
+/* — Original LogiCola Set O problem forms (Believing m=0, Willing m=1,
+     Rationality m=2), transcribed from the original program with the
+     sentence letters randomized each time. — */
+function oOriginalBank(){
+  const N=SYM.not, IMP=SYM.horseshoe, AND=SYM.and, OR=SYM.or, BOX=SYM.box, DIA=SYM.diamond;
+  const U='<u>u</u>', ul=x=>`<u>${x}</u>`;
+  const T=d=>String(d).replace(/<[^>]*>/g,'').replace(/&nbsp;/g,' ');
+  const A=(d,j)=>psAsm(d,T(d),j||'');
+  const D=(w,d,j)=>psDer(w,d,T(d),j);
+  const R=(d,j)=>psRaa('',d,T(d),j);
+  const F=(rows,note)=>psRef(refHtml(rows.map(([w,s])=>`<b>${w||'actual'}:</b> ${s}`).join(' &nbsp;&nbsp; '),note));
+  const P=(k)=>shuffle('ABCDEFGHJKMNPQST'.split('')).slice(0,k);
+  const believe=[
+    ()=>{ const [a,b]=P(2), c=`${N}(${U}:(${N}${a} ${AND} ${b}) ${AND} ${U}:${N}${b})`;
+      return {prem:[],concl:c,valid:true,steps:[
+        A(`(${U}:(${N}${a} ${AND} ${b}) ${AND} ${U}:${N}${b})`),
+        D('',`${U}:(${N}${a} ${AND} ${b})`,'{from 1}'), D('',`${U}:${N}${b}`,'{from 1}'),
+        D('u',`(${N}${a} ${AND} ${b})`,'{from 2}'), D('u',`${N}${a}`,'{from 4}'), D('u',b,'{from 4}'),
+        D('u',`${N}${b}`,'{from 3}'), R(c,'{from 1; 6 contradicts 7}')]}; },
+    ()=>{ const [e,b]=P(2), m='m', c=`(${N}${U}:${N}${b}${m} ${OR} ${N}u:${N}${e}${m})`;
+      return {prem:[`${BOX}(${N}${e}${m} ${IMP} ${b}${m})`],concl:c,valid:false,steps:[
+        A(`${N}${c}`), D('',`${U}:${N}${b}${m}`,'{from 2}'), D('',`u:${N}${e}${m}`,'{from 2}'),
+        D('u',`${N}${b}${m}`,'{from 3}'), D('u',`(${N}${e}${m} ${IMP} ${b}${m})`,'{from 1}'),
+        D('u',`${e}${m}`,'{from 5 and 6}'),
+        F([['',`u:${N}${e}${m}`],['u',`${N}${b}${m}, ${e}${m}`]],`"u:${N}${e}${m}" has no underlined u, so it describes a belief and doesn't put anything into belief world u.`)]}; },
+    ()=>{ const [s,a]=P(2), c=`(${N}${U}:${a} ${OR} ${U}:${s})`;
+      return {prem:[`${N}${DIA}${N}(${s} ${OR} ${N}${a})`],concl:c,valid:true,steps:[
+        A(`${N}${c}`), D('',`${BOX}(${s} ${OR} ${N}${a})`,'{from 1}'), D('',`${U}:${a}`,'{from 2}'),
+        D('',`${N}${U}:${s}`,'{from 2}'), D('u',`${N}${s}`,'{from 5}'), D('u',`(${s} ${OR} ${N}${a})`,'{from 3}'),
+        D('u',`${N}${a}`,'{from 6 and 7}'), D('u',a,'{from 4}'), R(c,'{from 2; 8 contradicts 9}')]}; },
+    ()=>{ const [h,a]=P(2), c=`${N}(${N}${U}:(${N}${h} ${OR} ${a}) ${AND} ${N}${U}:${h})`;
+      return {prem:[],concl:c,valid:false,steps:[
+        A(`(${N}${U}:(${N}${h} ${OR} ${a}) ${AND} ${N}${U}:${h})`),
+        D('',`${N}${U}:(${N}${h} ${OR} ${a})`,'{from 1}'), D('',`${N}${U}:${h}`,'{from 1}'),
+        D('u',`${N}(${N}${h} ${OR} ${a})`,'{from 2}'), D('uu',`${N}${h}`,'{from 3}'),
+        D('u',h,'{from 4}'), D('u',`${N}${a}`,'{from 4}'),
+        F([['u',`${h}, ${N}${a}`],['uu',`${N}${h}`]],`Each "${N}${U}:" gets its own new belief world, so nothing clashes.`)]}; },
+    ()=>{ const [k]=P(1), x=qE('x'), al=qU('x'), c=`${N}(${U}:${N}${x}${k}x ${AND} ${N}${U}:${N}${k}a)`;
+      return {prem:[],concl:c,valid:true,steps:[
+        A(`(${U}:${N}${x}${k}x ${AND} ${N}${U}:${N}${k}a)`),
+        D('',`${U}:${N}${x}${k}x`,'{from 1}'), D('',`${N}${U}:${N}${k}a`,'{from 1}'),
+        D('u',`${k}a`,'{from 3}'), D('u',`${N}${x}${k}x`,'{from 2}'), D('u',`${al}${N}${k}x`,'{from 5}'),
+        D('u',`${N}${k}a`,'{from 6}'), R(c,'{from 1; 4 contradicts 7}')]}; },
+    ()=>{ const [n,m]=P(2), c=`${DIA}${N}(${n}a ${IMP} ${N}${m}a)`;
+      return {prem:[`${N}(${U}:${n}a ${IMP} ${N}${U}:${m}a)`],concl:c,valid:true,steps:[
+        A(`${N}${c}`), D('',`${U}:${n}a`,'{from 1}'), D('',`${U}:${m}a`,'{from 1}'),
+        D('',`${BOX}(${n}a ${IMP} ${N}${m}a)`,'{from 2}'), D('u',`${n}a`,'{from 3}'), D('u',`${m}a`,'{from 4}'),
+        D('u',`(${n}a ${IMP} ${N}${m}a)`,'{from 5}'), D('u',`${N}${m}a`,'{from 6 and 8}'),
+        R(c,'{from 2; 7 contradicts 9}')]}; },
+    ()=>{ const [a,p]=P(2), c=`(${N}u:${p} ${IMP} ${N}u:${N}${a})`;
+      return {prem:[`${BOX}(${N}${a} ${IMP} ${p})`],concl:c,valid:false,steps:[
+        A(`${N}${c}`), D('',`${N}u:${p}`,'{from 2}'), D('',`u:${N}${a}`,'{from 2}'),
+        F([['',`${N}u:${p}, u:${N}${a}`]],`Without an underlined u these just describe what you believe; B+ and B− don't apply, so no belief worlds are made.`)]}; },
+    ()=>{ const [t]=P(1), x=qE('x'), c=`${N}(${N}u:${N}${t}b ${AND} u:${N}${x}${t}x)`;
+      return {prem:[],concl:c,valid:false,steps:[
+        A(`(${N}u:${N}${t}b ${AND} u:${N}${x}${t}x)`), D('',`${N}u:${N}${t}b`,'{from 1}'), D('',`u:${N}${x}${t}x`,'{from 1}'),
+        F([['',`${N}u:${N}${t}b, u:${N}${x}${t}x`]],`People can be inconsistent; the u here isn't underlined, so this isn't a consistency norm.`)]}; },
+  ];
+  const will=[
+    ()=>{ const [h]=P(1), x=qE('x'), al=qU('x'), c=`(u:${N}${h}${U} ${IMP} ${N}${U}:${N}${x}${N}${h}${ul('x')})`;
+      return {prem:[],concl:c,valid:false,steps:[
+        A(`${N}${c}`), D('',`u:${N}${h}${U}`,'{from 1}'), D('',`${U}:${N}${x}${N}${h}${ul('x')}`,'{from 1}'),
+        D('u',`${N}${x}${N}${h}${ul('x')}`,'{from 3}'), D('u',`${al}${h}${ul('x')}`,'{from 4}'), D('u',`${h}${U}`,'{from 5}'),
+        F([['',`u:${N}${h}${U}`],['u',`${h}${U}`]],`"u:${N}${h}${U}" (u not underlined) describes what you will; it doesn't put "${N}${h}${U}" into world u.`)]}; },
+    ()=>{ const [k]=P(1), al=qU('x'), c=`(${N}${U}:${N}${k}${U} ${OR} ${N}${U}:${al}${k}${ul('x')})`;
+      return {prem:[],concl:c,valid:true,steps:[
+        A(`${N}${c}`), D('',`${U}:${N}${k}${U}`,'{from 1}'), D('',`${U}:${al}${k}${ul('x')}`,'{from 1}'),
+        D('u',`${N}${k}${U}`,'{from 2}'), D('u',`${al}${k}${ul('x')}`,'{from 3}'), D('u',`${k}${U}`,'{from 5}'),
+        R(c,'{from 1; 4 contradicts 6}')]}; },
+    ()=>{ const [m,a]=P(2), c=`${N}${BOX}(${N}${m}${U} ${IMP} ${N}${a}${U})`;
+      return {prem:[`(${U}:${N}${m}${U} ${AND} ${U}:${a}${U})`],concl:c,valid:true,steps:[
+        A(`${BOX}(${N}${m}${U} ${IMP} ${N}${a}${U})`), D('',`${U}:${N}${m}${U}`,'{from 1}'), D('',`${U}:${a}${U}`,'{from 1}'),
+        D('u',`${N}${m}${U}`,'{from 3}'), D('u',`(${N}${m}${U} ${IMP} ${N}${a}${U})`,'{from 2}'),
+        D('u',`${N}${a}${U}`,'{from 5 and 6}'), D('u',`${a}${U}`,'{from 4}'), R(c,'{from 2; 7 contradicts 8}')]}; },
+    ()=>{ const [m,e]=P(2), M=ul(m), E=ul(e), c=`(${U}:${N}${E} ${OR} ${U}:${M})`;
+      return {prem:[`${N}${DIA}${N}(${M} ${OR} ${N}${E})`],concl:c,valid:false,steps:[
+        A(`${N}${c}`), D('',`${BOX}(${M} ${OR} ${N}${E})`,'{from 1}'), D('',`${N}${U}:${N}${E}`,'{from 2}'),
+        D('',`${N}${U}:${M}`,'{from 2}'), D('u',E,'{from 4}'), D('uu',`${N}${M}`,'{from 5}'),
+        D('u',`(${M} ${OR} ${N}${E})`,'{from 3}'), D('u',M,'{from 6 and 8}'),
+        D('uu',`(${M} ${OR} ${N}${E})`,'{from 3}'), D('uu',`${N}${E}`,'{from 7 and 10}'),
+        F([['u',`${E}, ${M}`],['uu',`${N}${M}, ${N}${E}`]],`You can consistently will neither alternative.`)]}; },
+    ()=>{ const [p]=P(1), x=qE('x'), al=qU('x'), c=`(${N}${U}:${N}${p}${U} ${IMP} ${U}:${x}${p}${ul('x')})`;
+      return {prem:[],concl:c,valid:false,steps:[
+        A(`${N}${c}`), D('',`${N}${U}:${N}${p}${U}`,'{from 1}'), D('',`${N}${U}:${x}${p}${ul('x')}`,'{from 1}'),
+        D('u',`${p}${U}`,'{from 2}'), D('uu',`${N}${x}${p}${ul('x')}`,'{from 3}'), D('uu',`${al}${N}${p}${ul('x')}`,'{from 5}'),
+        D('uu',`${N}${p}${U}`,'{from 6}'),
+        F([['u',`${p}${U}`],['uu',`${N}${p}${U}`]],`Not willing "not-${p}" doesn't commit you to willing that someone ${p}.`)]}; },
+    ()=>{ const [a]=P(1), al=qU('x'), c=`(${U}:${N}R${N}${al}${N}${a}${ul('x')} ${IMP} ${U}:${N}${a}${U})`;
+      return {prem:[],concl:c,valid:true,steps:[
+        A(`${N}${c}`), D('',`${U}:${N}R${N}${al}${N}${a}${ul('x')}`,'{from 1}'), D('',`${N}${U}:${N}${a}${U}`,'{from 1}'),
+        D('u',`${a}${U}`,'{from 3}'), D('u',`${N}R${N}${al}${N}${a}${ul('x')}`,'{from 2}'),
+        D('u',`O${al}${N}${a}${ul('x')}`,'{from 5}'), D('u',`${al}${N}${a}${ul('x')}`,'{from 6}'),
+        D('u',`${N}${a}${U}`,'{from 7}'), R(c,'{from 1; 4 contradicts 8}')]}; },
+    ()=>{ const [n]=P(1), x=qE('x'), al=qU('x'), c=`${N}(${U}:${N}${n}${ul('f')} ${AND} ${U}:${N}${x}${N}${n}${ul('x')})`;
+      return {prem:[],concl:c,valid:true,steps:[
+        A(`(${U}:${N}${n}${ul('f')} ${AND} ${U}:${N}${x}${N}${n}${ul('x')})`),
+        D('',`${U}:${N}${n}${ul('f')}`,'{from 1}'), D('',`${U}:${N}${x}${N}${n}${ul('x')}`,'{from 1}'),
+        D('u',`${N}${n}${ul('f')}`,'{from 2}'), D('u',`${N}${x}${N}${n}${ul('x')}`,'{from 3}'),
+        D('u',`${al}${n}${ul('x')}`,'{from 5}'), D('u',`${n}${ul('f')}`,'{from 6}'), R(c,'{from 1; 4 contradicts 7}')]}; },
+    ()=>{ const [a,s]=P(2), Aa=ul(a), S=ul(s), c=`(${N}${U}:${N}${Aa} ${IMP} ${U}:(${N}${S} ${OR} ${Aa}))`;
+      return {prem:[],concl:c,valid:false,steps:[
+        A(`${N}${c}`), D('',`${N}${U}:${N}${Aa}`,'{from 1}'), D('',`${N}${U}:(${N}${S} ${OR} ${Aa})`,'{from 1}'),
+        D('u',Aa,'{from 2}'), D('uu',`${N}(${N}${S} ${OR} ${Aa})`,'{from 3}'), D('uu',S,'{from 5}'), D('uu',`${N}${Aa}`,'{from 5}'),
+        F([['u',Aa],['uu',`${S}, ${N}${Aa}`]],`Each "${N}${U}:" opens its own new world, so ${Aa} and ${N}${Aa} never meet.`)]}; },
+  ];
+  const rat=[
+    ()=>{ const [a,n]=P(2), c=`O(${N}${U}:${N}${a} ${OR} ${N}${U}:(${a} ${AND} ${N}${n}))`;
+      return {prem:[],concl:c,valid:true,steps:[
+        A(`${N}${c}`), D('',`R${N}(${N}${U}:${N}${a} ${OR} ${N}${U}:(${a} ${AND} ${N}${n}))`,'{from 1}'),
+        D('D',`${N}(${N}${U}:${N}${a} ${OR} ${N}${U}:(${a} ${AND} ${N}${n}))`,'{from 2}'),
+        D('D',`${U}:${N}${a}`,'{from 3}'), D('D',`${U}:(${a} ${AND} ${N}${n})`,'{from 3}'),
+        D('Du',`${N}${a}`,'{from 4}'), D('Du',`(${a} ${AND} ${N}${n})`,'{from 5}'), D('Du',a,'{from 7}'),
+        R(c,'{from 1; 6 contradicts 8}')]}; },
+    ()=>{ const [f]=P(1), c=`(${N}O${N}${U}:${f} ${IMP} ${N}O${U}:${N}${f})`;
+      return {prem:[],concl:c,valid:true,steps:[
+        A(`${N}${c}`), D('',`${N}O${N}${U}:${f}`,'{from 1}'), D('',`O${U}:${N}${f}`,'{from 1}'),
+        D('',`R${U}:${f}`,'{from 2}'), D('D',`${U}:${f}`,'{from 4}'), D('D',`${U}:${N}${f}`,'{from 3}'),
+        D('Du',f,'{from 5}'), D('Du',`${N}${f}`,'{from 6}'), R(c,'{from 1; 7 contradicts 8}')]}; },
+    ()=>{ const [a,k]=P(2), c=`${N}R${N}${U}:${N}${k}`;
+      return {prem:[`${N}${DIA}(${a} ${AND} ${k})`,`${N}O${U}:${N}${a}`],concl:c,valid:false,steps:[
+        A(`R${N}${U}:${N}${k}`), D('',`${BOX}${N}(${a} ${AND} ${k})`,'{from 1}'), D('',`R${N}${U}:${N}${a}`,'{from 2}'),
+        D('D',`${N}${U}:${N}${k}`,'{from 3}'), D('DD',`${N}${U}:${N}${a}`,'{from 5}'),
+        D('Du',k,'{from 6}'), D('DDu',a,'{from 7}'),
+        D('Du',`${N}(${a} ${AND} ${k})`,'{from 4}'), D('Du',`${N}${a}`,'{from 8 and 10}'),
+        D('DDu',`${N}(${a} ${AND} ${k})`,'{from 4}'), D('DDu',`${N}${k}`,'{from 9 and 12}'),
+        F([['Du',`${k}, ${N}${a}`],['DDu',`${a}, ${N}${k}`]],`The two "R" lines open different deontic worlds, so nothing clashes.`)]}; },
+    ()=>{ const [j,t]=P(2), c=`${N}R${N}(${U}:${j} ${OR} ${U}:${t})`;
+      return {prem:[`${N}${DIA}${N}(${N}${j} ${IMP} ${t})`],concl:c,valid:false,steps:[
+        A(`R${N}(${U}:${j} ${OR} ${U}:${t})`), D('',`${BOX}(${N}${j} ${IMP} ${t})`,'{from 1}'),
+        D('D',`${N}(${U}:${j} ${OR} ${U}:${t})`,'{from 2}'), D('D',`${N}${U}:${j}`,'{from 4}'), D('D',`${N}${U}:${t}`,'{from 4}'),
+        D('Du',`${N}${j}`,'{from 5}'), D('Duu',`${N}${t}`,'{from 6}'),
+        D('Du',`(${N}${j} ${IMP} ${t})`,'{from 3}'), D('Du',t,'{from 7 and 9}'),
+        D('Duu',`(${N}${j} ${IMP} ${t})`,'{from 3}'), D('Duu',j,'{from 8 and 11}'),
+        F([['Du',`${N}${j}, ${t}`],['Duu',`${N}${t}, ${j}`]],`It can be reasonable to believe neither alternative.`)]}; },
+    ()=>{ const [s]=P(1), al=qU('x'), c=`${N}R${N}(${N}${U}:${N}${al}${N}${s}x ${IMP} ${U}:${N}${s}q)`;
+      return {prem:[],concl:c,valid:false,steps:[
+        A(`R${N}(${N}${U}:${N}${al}${N}${s}x ${IMP} ${U}:${N}${s}q)`),
+        D('D',`${N}(${N}${U}:${N}${al}${N}${s}x ${IMP} ${U}:${N}${s}q)`,'{from 1}'),
+        D('D',`${N}${U}:${N}${al}${N}${s}x`,'{from 2}'), D('D',`${N}${U}:${N}${s}q`,'{from 2}'),
+        D('Du',`${al}${N}${s}x`,'{from 3}'), D('Duu',`${s}q`,'{from 4}'), D('Du',`${N}${s}q`,'{from 5}'),
+        F([['Du',`${N}${s}q`],['Duu',`${s}q`]],`The two belief worlds are separate, so ${s}q and ${N}${s}q don't clash.`)]}; },
+    ()=>{ const [q,a]=P(2), c=`${N}O${U}:${a}`;
+      return {prem:[`${N}R${N}${U}:${N}${q}`,`${N}${DIA}(${N}${q} ${AND} ${a})`],concl:c,valid:true,steps:[
+        A(`O${U}:${a}`), D('',`O${U}:${N}${q}`,'{from 1}'), D('',`${BOX}${N}(${N}${q} ${AND} ${a})`,'{from 2}'),
+        D('',`${U}:${a}`,'{from 3}'), D('',`${U}:${N}${q}`,'{from 4}'), D('u',a,'{from 6}'),
+        D('u',`${N}(${N}${q} ${AND} ${a})`,'{from 5}'), D('u',q,'{from 8 and 9}'), D('u',`${N}${q}`,'{from 7}'),
+        R(c,'{from 3; 10 contradicts 11}')]}; },
+    ()=>{ const [j,q]=P(2), c=`${N}(R${N}${U}:${j} ${AND} ${N}R${U}:${N}${q})`;
+      return {prem:[`O${U}:(${N}${j} ${IMP} ${N}${q})`],concl:c,valid:false,steps:[
+        A(`(R${N}${U}:${j} ${AND} ${N}R${U}:${N}${q})`), D('',`R${N}${U}:${j}`,'{from 2}'), D('',`${N}R${U}:${N}${q}`,'{from 2}'),
+        D('D',`${N}${U}:${j}`,'{from 3}'), D('',`O${N}${U}:${N}${q}`,'{from 4}'), D('Du',`${N}${j}`,'{from 5}'),
+        D('D',`${U}:(${N}${j} ${IMP} ${N}${q})`,'{from 1}'), D('D',`${N}${U}:${N}${q}`,'{from 6}'), D('Duu',q,'{from 9}'),
+        D('Du',`(${N}${j} ${IMP} ${N}${q})`,'{from 8}'), D('Du',`${N}${q}`,'{from 7 and 11}'),
+        D('Duu',`(${N}${j} ${IMP} ${N}${q})`,'{from 8}'), D('Duu',j,'{from 10 and 13}'),
+        F([['Du',`${N}${j}, ${N}${q}`],['Duu',`${q}, ${j}`]],`The belief worlds Du and Duu are separate, so no contradiction appears.`)]}; },
+    ()=>{ const [e,k]=P(2), c=`${DIA}${N}(${e} ${IMP} ${k})`;
+      return {prem:[`R${N}(${N}${U}:${e} ${OR} ${N}${U}:${N}${k})`],concl:c,valid:true,steps:[
+        A(`${N}${c}`), D('D',`${N}(${N}${U}:${e} ${OR} ${N}${U}:${N}${k})`,'{from 1}'), D('',`${BOX}(${e} ${IMP} ${k})`,'{from 2}'),
+        D('D',`${U}:${e}`,'{from 3}'), D('D',`${U}:${N}${k}`,'{from 3}'), D('Du',e,'{from 5}'),
+        D('Du',`(${e} ${IMP} ${k})`,'{from 4}'), D('Du',k,'{from 7 and 8}'), D('Du',`${N}${k}`,'{from 6}'),
+        R(c,'{from 2; 9 contradicts 10}')]}; },
+  ];
+  return {believe, will, rat};
+}
 function makeO(){
   const N=SYM.not, IMP=SYM.horseshoe, AND=SYM.and, OR=SYM.or;
   const bank=[
@@ -6680,14 +6865,19 @@ function makeO(){
       psDer('Du',`B`,`B`,'{from 8 and 9}'),
       psRaa('',`${N}R<u>u</u>:A`,`~Ru:A`,'{from 3; 7 contradicts 10}')]})
   );
-  const s=pick(bank)();
+  const ob=oOriginalBank();
+  const O_POOLS={believe:ob.believe.concat(bank.slice(0,7)), will:ob.will, rat:ob.rat.concat(bank.slice(7))};
+  let om=state.oMode||'believe'; if(!O_POOLS[om]&&om!=='mix') om='believe';
+  const pool= om==='mix' ? O_POOLS[pick(['believe','will','rat'])] : O_POOLS[om];
+  const s=pick(pool)();
   const selfStar=state.gStars==='self';
+  const oLabel={believe:'Believing',will:'Willing',rat:'Rationality',mix:'Mixed'}[om];
   return proofPlayer({
-    setLine:`Set O — Belief Proofs${state.gTrain?' (training wheels)':''}`,
+    setLine:`Set O — Belief Proofs (${oLabel})${state.gTrain?' (training wheels)':''}`,
     script:s,
     prompt:`${s.prem.length?'Say whether valid (and give the proof) or invalid (and refute it). An implicit "be consistent" premise is built into the rules.':'Prove this consistency norm.'}`,
     stars:selfStar?'self':'auto', train:!!state.gTrain,
-    instr:`Belief worlds ("u", "uu", …) contain everything the person is committed to accepting. <b>B−</b>: from "${SYM.not}u:A" derive "u ${SYM.therefore} ${SYM.not}A" in a NEW belief world (star the original). <b>B+</b>: from "u:A" derive "u ${SYM.therefore} A" in any belief world (don't star). Rationality proofs mix worlds: "Du" is the belief world of an ideal deontic world, "DuD" an ideal world of that. In typed mode prefix world lines "u: …", "D: …", "Du: …".`
+    instr:`Belief worlds ("u", "uu", …) contain everything the person is committed to accepting. <b>B−</b>: from "${SYM.not}u:A" derive "u ${SYM.therefore} ${SYM.not}A" in a NEW belief world (star the original). <b>B+</b>: from "u:A" derive "u ${SYM.therefore} A" in any belief world (don't star). Rationality proofs mix worlds: "Du" is the belief world of an ideal deontic world, "DuD" an ideal world of that. In typed mode prefix world lines "u: …", "D: …", "Du: …".${om==='will'||om==='mix'?' <b>Willing:</b> an underlined letter after the colon ("u:A<u>u</u>") is something willed; B+ and B− work the same way.':''}`
   });
 }
 function genO(){ return makeO(); }
@@ -6754,7 +6944,7 @@ function pCards(){
      v:40/51, viz:cardHtml('4','♥')+cardBack()+cardBack(),
      exp:`40 of the remaining 51 cards are a 5 or higher (10 per suit): 40/51 ≈ 78.4%. (Values run 2…10, J, Q, K, A.)`},
   ];
-  return pFinish(pick(items),'cards');
+  return pTypedPct(pick(items),'cards');
 }
 function pDice(){
   const n=2+rand(5);
@@ -6788,7 +6978,7 @@ function pDice(){
      v:15/36, twoDice:true,
      exp:`15 of the 36 combinations total 8 or more: 15/36 ≈ 41.7% — the same as your chance of losing; 6/36 tie.`},
   ];
-  return pFinish(pick(items),'dice');
+  return pTypedPct(pick(items),'dice');
 }
 function pCoins(){
   const items=[
@@ -6803,13 +6993,21 @@ function pCoins(){
     {q:`You flip two coins. What is the probability of exactly one head?`,
      v:2/4, viz:coinHtml('H')+coinHtml('T'), exp:`HT and TH — 2 of 4 equally likely outcomes: 1/2.`},
   ];
-  return pFinish(pick(items),'coins');
+  return pTypedPct(pick(items),'coins');
 }
 function pfrac(){ const d=pick([2,3,4,5,6]); const n=1+rand(d-1); return {n,d,v:n/d}; }
 function pRules(){
   const a=pfrac();
-  const type=pick(['not','and','or','cond','nec','contra']);
+  const type=pick(['not','and','or','cond','nec','contra','oddsprob']);
   let it;
+  if(type==='oddsprob'){
+    const x=1+rand(9), y=1+rand(9), favor=Math.random()<0.6;
+    if(x===y) return pRules();
+    const v=favor?x/(x+y):y/(x+y);
+    it={q:`The odds are ${x} to ${y} ${favor?'in favor of':'against'} your team winning. What is the probability that it wins?`,
+        v, viz:'', exp:`Odds x to y ${favor?'in favor':'against'} → probability ${favor?'x':'y'}/(x+y) = ${favor?x:y}/${x+y} = ${fmtProb(v)}.`};
+    return pFinish(it,'rules');
+  }
   if(type==='nec'){
     const S1=pick(STMTS);
     it={q:`What is the probability that either ${S1.txt}, or it's false that ${S1.txt}?`,
@@ -6888,145 +7086,605 @@ function pFinish(it,kind){
     explain:()=>`Answer: <b>${ansStr}</b> (= ${pct}%). ${it.exp}`
   };
 }
-/* ---- odds: against / even / in favor, and odds ↔ probability ---- */
-function pOdds(){
+/* ==========================================================================
+   SET P — the original LogiCola problem kinds (Gensler, 2020-12-07 build):
+   Percent, Odds, Complex, Gamble, Decide, Varied, Induction, Mill, Both.
+   Wording, number ranges and feedback follow the original's script for
+   Set P. Answers are typed as in the original: a whole-number percent
+   (fractions dropped; one off either way accepted), a dollar amount, or
+   odds "x to y". Odds, Induction and Mill are two-step questions.
+   ========================================================================== */
+const pDiv=(a,b)=>Math.trunc(a/b);                 // Delphi "div": drop fractions
+const P_TEAMS=['Michigan','Ohio','Nebraska','Iowa','Minnesota','Arizona','Hawaii','Alabama','Illinois','Washington','Oregon','Kentucky','Georgia','Oklahoma','California','Maryland','Arkansas'];
+const P_SURN=['Smith','Jones','Brown','Greene','Fernandez','Connolly','Wong','Weiss','Stevens','Wilson','Rogers','Hilton','Haggard','Miller','Boyle','Hughes','Martinez'];
+const P_FIRMS=['Mushy Software','Trendy Stuff','Hit or Miss','Micro Junque','LogiCola Inc'];
+const P_NOUNS=['German','bachelor','professor','biologist','carpenter','lifeguard','convict','dancer','soldier','dentist','criminal','foreigner','diabetic','druggist','backpacker','farmer','poet','fugitive','detective','plumber','grocer','lawyer','customer','guitarist','clown','pilot','judge','librarian','prisoner','logician','musician','novelist','pessimist','scientist','pharmacist','reporter','politician','republican','scholar','Canadian','senator','doctor','student','banker','teacher','democrat','wrestler'];
+const P_ADJS=['slow','cheap','strong','tall','clean','wild','cruel','dull','short','mean','poor','rich','bold','rough','bright','smart','tough','weak','bashful','sociable','tactful','boring','careful','scholarly','talented','cautious','vicious','charitable','frivolous','generous','charming','frightened','gentle','prosperous','realistic','cheerful'];
+const P_PRIMES=[3,5,7,11,13,17,19];
+const pArt=w=>(/^[aeiouAEIOU]/.test(w)?'an ':'a ')+w;
+const pRankName=v=>({14:'ace',13:'king',12:'queen',11:'jack'}[v]||String(v));
+const pRankSym=v=>({14:'A',13:'K',12:'Q',11:'J'}[v]||String(v));
+const pSuitName={'♠':'spade','♥':'heart','♦':'diamond','♣':'club'};
+function pCard(c){ return cardHtml(pRankSym(c.v),c.s); }
+function pDealDistinct(n){
+  const out=[];
+  while(out.length<n){ const c={v:2+rand(13), s:pick(P_SUITS)}; if(!out.some(d=>d.v===c.v&&d.s===c.s)) out.push(c); }
+  return out;
+}
+function pTwoDice(a,b){ return dieHtml(a)+dieHtml(b); }
+function pCombos(){
+  const rows=['HHH','HHT','HTH','HTT','THH','THT','TTH','TTT'];
+  return `<div class="pcombos"><div class="pcombos-h">8 combinations</div>${rows.map(r=>`<span>${r}</span>`).join('')}</div>`;
+}
+const pAllKnow='<div class="pallknow">This is all you know.</div>';
+
+/* A "situation": favorable cases k out of j equally likely cases, with the
+   original's wording. forBet: the gamble version ("You bet …"). */
+function pSituation(forBet, opts){
+  opts=opts||{};
+  for(let guard=0; guard<60; guard++){
+    const dev=opts.device||pick(['cards','dice','coins','stat']);
+    const s=dev==='cards'?pSitCards():dev==='dice'?pSitDice(opts):dev==='coins'?pSitCoins():pSitStat(forBet);
+    if(opts.needBoth && (s.k<=0 || s.k>=s.j)) continue;   // odds and gambles need both outcomes possible
+    return s;
+  }
+  return pSitCoins();
+}
+function pSitCards(){
+  const o=rand(8);
+  let txt='', vz='', k=0, j=52;
+  if(o<=1){
+    const picked=pDealDistinct(o===0?2:1);
+    const st=pick(P_SUITS);
+    j=52-picked.length; k=13-picked.filter(c=>c.s===st).length;
+    txt=`You just picked ${picked.length===2?'2 cards':'1 card'} from a fresh 52 card deck. You want to draw ${pArt(pSuitName[st])} for your next card.`;
+    vz=picked.map(pCard).join('');
+  } else if(o<=5){
+    const big=o>=4;                                   // two decks shuffled together
+    const two=(o===2||o===4);
+    let picked;
+    if(two){ const v=2+rand(13); const same=big||Math.random()<0.5;
+      const s1=pick(P_SUITS); let s2=pick(P_SUITS); if(!big) while(s2===s1) s2=pick(P_SUITS);
+      picked=[{v,s:s1},{v:same?v:(()=>{let w;do{w=2+rand(13);}while(w===v);return w;})(),s:s2}]; }
+    else picked=pDealDistinct(1);
+    const deck=big?104:52, per=big?8:4, v=picked[0].v;
+    j=deck-picked.length; k=per-picked.filter(c=>c.v===v).length;
+    txt=`You just picked ${two?'2 cards':'1 card'} from a fresh ${deck} card deck${big?' (two decks shuffled together)':''}. You want to draw another ${pRankName(v)} for your next card.`;
+    vz=picked.map(pCard).join('');
+  } else {
+    const picked=pDealDistinct(o===6?2:1);
+    const top=Math.max(...picked.map(c=>c.v));
+    j=52-picked.length; k=4*(14-top);
+    txt=`Your opponent just picked ${o===6?'these cards':'this card'} from a fresh 52 card deck. Now you draw a card. You want to beat ${o===6?'both cards':'the card'} of your opponent. (Aces are high; a tie doesn't beat.)`;
+    vz=picked.map(pCard).join('');
+  }
+  return {txt, viz:vz?viz(vz):'', k, j, device:'cards'};
+}
+function pSitDice(opts){
+  const o=rand(3);
+  let txt='', vz='', k=0, j=36, table=false;
+  if(o===0){
+    const a=1+rand(opts&&opts.needBoth?5:6);
+    j=6; k=6-a;
+    txt=`You're going to toss the second die. You want to beat the ${a}.`;
+    vz=dieHtml(a);
+  } else if(o===1){
+    const a=1+rand(6), b=1+rand(6), c=a+b;
+    k=0; for(let x=1;x<=6;x++) for(let y=1;y<=6;y++) if(x+y>c) k++;
+    txt=`You're tossing a pair of dice. You want to beat the pair shown (a total of ${c}).`;
+    vz=pTwoDice(a,b); table=true;
+  } else {
+    const a=1+rand(6), b=1+rand(6), c=a+b;
+    k=0; for(let x=1;x<=6;x++) for(let y=1;y<=6;y++) if(x+y===c) k++;
+    txt=`You're tossing a pair of dice. You want to throw a total of exactly ${c}.`;
+    table=true;
+  }
+  return {txt, viz:vz?viz(vz):'', k, j, table, device:'dice'};
+}
+function pSitCoins(){
+  const [D,E]=Math.random()<0.5?['head','tail']:['tail','head'];
+  const forms=[
+    [`three ${D}s`,1],
+    [`exactly two ${D}s and one ${E}`,3],
+    [`at least one ${D}`,7],
+    [`at least two ${D}s`,4],
+    [`all ${D}s or all ${E}s`,2],
+    [`at least one ${D} and at least one ${E}`,6]];
+  const [w,k]=pick(forms);
+  return {txt:`You're tossing three coins. You want to get ${w}.`, viz:viz(coinHtml('H')+coinHtml('T')+coinHtml('H'))+pCombos(), k, j:8, device:'coins'};
+}
+function pSitStat(forBet){
+  const j=pick(P_PRIMES), k=1+rand(j-1);
+  const nm=pick(P_SURN), team=pick(P_TEAMS), place=pick(P_TEAMS);
+  const lead=forBet?'You bet ':'You think ';
   const items=[
-    {q:`You draw one card from a 52-card deck. What are the odds regarding drawing an ace?`,
-     a:'12 to 1 against', viz:cardHtml('A','♠')+cardBack(),
-     d:['1 to 12 against','12 to 1 in favor','even'],
-     exp:`48 unfavorable vs. 4 favorable: 48/4 = 12 to 1 against.`},
-    {q:`You draw one card from a 52-card deck. What are the odds regarding drawing a red card (heart or diamond)?`,
-     a:'even', viz:cardHtml('7','♥')+cardHtml('7','♠'),
-     d:['2 to 1 in favor','2 to 1 against','13 to 12 in favor'],
-     exp:`26 favorable vs. 26 unfavorable — even odds.`},
-    {q:`You draw one card from a 52-card deck. What are the odds regarding drawing a non-face card?`,
-     a:'10 to 3 in favor', viz:cardHtml('9','♦')+cardHtml('J','♠'),
-     d:['3 to 10 in favor','10 to 3 against','even'],
-     exp:`40 favorable vs. 12 unfavorable: 40/12 = 10 to 3 in your favor.`},
-    {q:`You throw one die. What are the odds regarding rolling a six?`,
-     a:'5 to 1 against',
-     d:['1 to 5 against','5 to 1 in favor','even'],
-     exp:`5 unfavorable faces vs. 1 favorable: 5 to 1 against.`},
-    {q:`You throw one die. What are the odds regarding rolling a 4 or less?`,
-     a:'2 to 1 in favor',
-     d:['2 to 1 against','4 to 2 against','even'],
-     exp:`4 favorable faces vs. 2 unfavorable: 4/2 = 2 to 1 in your favor.`},
-    {q:`The odds are 3 to 2 in favor of your team winning. What is the probability that it wins?`,
-     a:'3/5', viz:'',
-     d:['2/5','3/2','2/3'],
-     exp:`Odds x to y in favor → probability x/(x+y) = 3/5 = 60%.`},
-    {q:`The odds are 9 to 1 against your team winning. What is the probability that it wins?`,
-     a:'1/10', viz:'',
-     d:['9/10','1/9','1/2'],
-     exp:`Odds x to y against → probability y/(x+y) = 1/10 = 10%.`},
-    {q:`The odds are even (1 to 1) that it rains. What is the probability of rain?`,
-     a:'1/2', viz:'',
-     d:['1/1','1/4','2/3'],
-     exp:`Even odds = probability 50%.`},
-  ];
-  const it=pick(items);
-  return { setLine:'Set P — Probability (odds)', scratch:true,
-    prompt:`${it.q}${it.viz?viz(it.viz):''}`,
-    instr:`Odds compare favorable to unfavorable cases. More unfavorable → "x to y against" = unfavorable/favorable; more favorable → "in favor" = favorable/unfavorable; equal → even. Convert: odds x to y in favor → P = x/(x+y); x to y against → P = y/(x+y).`,
-    mode:'mc', noKeyboard:true, scoreKind:'probOddsMC',
-    choices: mc(it.a, it.d),
-    explain:()=>`Answer: <b>${it.a}</b>. ${it.exp}` };
+    ()=>`${team} quarterbacks throw an interception on ${k} out of ${j} passes. ${nm}, the ${team} quarterback, is going to pass.<br><br>${lead}${nm} will throw an interception.`,
+    ()=>`${nm} fumbles ${k} out of ${j} times that he carries the ball for ${team}. ${nm} is to carry the ball for ${team}.<br><br>${lead}${nm} will fumble.`,
+    ()=>`Pilots from ${place} land safely ${k} out of ${j} times. ${nm}, your pilot, is from ${place}.<br><br>${lead}${nm} will land safely.`,
+    ()=>{ const party=pick(['republican','democratic']); return `Out of every ${j} voters in ${place}, ${k} favor the ${party} candidate. ${nm} is a voter in ${place}.<br><br>${lead}${nm} favors the ${party} candidate.`; },
+    ()=>{ const maj=pick(['philosophy','English','business','biology','basket weaving']); return `${nm} goes to school at ${place}. ${k} out of ${j} who go to school at ${place} major in ${maj}.<br><br>${lead}${nm} majors in ${maj}.`; }];
+  return {txt:pick(items)(), viz:pAllKnow, k, j, device:'stat'};
 }
-/* ---- gamble & decide: expected gain ---- */
+
+/* ---- the step runner: one or more questions on one problem ----
+   Each step is multiple choice or typed. Scoring goes through the shared
+   hooks (awardCorrect / penalizeWrong) with the step's scoreKind; tries and
+   the penalty ladder start fresh at each step. */
+function pPrompt(s){ return `${s.txt}${s.viz||''}`; }
+function pStepsProblem(base, steps){
+  const p=Object.assign({mode:'custom', noKeyboard:true, scratch:true}, base);
+  p.scoreKind=steps[0].scoreKind;
+  p.steps=steps;                                     // read by the tests
+  let cur=0, over=false;
+  p.explain=()=>steps.map(st=>st.answerHtml?st.answerHtml():'').filter(Boolean).join('<br>');
+  p.mount=(root)=>{
+    root.innerHTML='<div class="psteps"></div>';
+    const box=root.firstChild;
+    const fb=()=>$('fb');
+    const lockStep=(div)=>{ div.querySelectorAll('button,input').forEach(x=>{ x.disabled=true; x.onclick=null; }); };
+    const finishStep=(div, i, ok)=>{
+      lockStep(div);
+      const st=steps[i];
+      if(i+1<steps.length && !(st.stopIf&&st.stopIf())){ show(i+1); return; }
+      over=true;
+    };
+    const show=(i)=>{
+      cur=i; const st=steps[i];
+      p.scoreKind=st.scoreKind; session.tries=0; session.lastPenalty=undefined;
+      const div=document.createElement('div'); div.className='pstep'; div.dataset.step=i;
+      let h=`<div class="pstep-q">${st.q}</div>`;
+      if(st.kind==='mc'){
+        h+=`<div class="choices">${st.choices.map((c,j)=>`<button type="button" class="choice" data-j="${j}"><span class="num">${j+1}</span><span class="txt">${c.text}</span></button>`).join('')}</div>`;
+      } else {
+        h+=`<div class="answerbox"><input class="ans pstep-in" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="${st.inputmode||'text'}" placeholder="${st.ph||'type your answer'}" aria-label="${plainText(st.q).slice(0,80)}"><button type="button" class="primary pstep-go">Enter</button></div>`;
+      }
+      div.innerHTML=h; box.appendChild(div);
+      const last=(i===steps.length-1);
+      const right=(msg)=>{
+        const endNow=last || !!(st.stopIf&&st.stopIf());
+        awardCorrect(msg||'', st.praise||null, {end:endNow});
+        finishStep(div,i,true);
+      };
+      const wrong=(why)=>{
+        const oneTry=!!st.oneTry;
+        if(!oneTry){ penalizeWrong(why, '', {end:false}); return false; }
+        const endNow=last || !!(st.stopIf&&st.stopIf());
+        if(endNow){ penalizeWrong(why, why, {end:true}); }
+        else {
+          penalizeWrong(why, '', {end:false});
+          const f=fb(); if(f){ const cost=scoringOn()&&session.lastPenalty?` (−${session.lastPenalty})`:''; f.className='feedback no show'; f.innerHTML=`❌ <b>Not quite.</b>${cost} ${why}`; }
+        }
+        finishStep(div,i,false);
+        return true;
+      };
+      if(st.kind==='mc'){
+        const btns=[...div.querySelectorAll('.choice')];
+        btns.forEach((b,j)=>b.onclick=()=>{
+          if(over||session.scoreEnded||b.classList.contains('bad')||b.classList.contains('good')) return;
+          const c=st.choices[j]; session.lastAnswer=plainText(c.text).slice(0,80);
+          if(c.correct){ b.classList.add('good'); right(st.onRight?st.onRight():''); }
+          else{ b.classList.add('bad');
+            const closed=wrong(st.onWrong?st.onWrong(c):'Sorry, that is wrong. Try again.');
+            if(closed) btns.forEach((x,m)=>{ if(st.choices[m].correct) x.classList.add('good'); }); }
+        });
+      } else {
+        const inp=div.querySelector('.pstep-in'), go=div.querySelector('.pstep-go');
+        const submit=()=>{
+          if(over||session.scoreEnded) return;
+          const val=inp.value; if(!val.trim()) return;
+          const bad=st.check?st.check(val):null;            // format problems cost nothing
+          if(bad){ const f=fb(); if(f){ f.className='feedback info show'; f.innerHTML=bad; } inp.focus(); return; }
+          session.lastAnswer=val.trim().slice(0,80);
+          if(st.accept(val)) right(st.onRight?st.onRight(val):'');
+          else wrong(st.onWrong?st.onWrong(val):'Sorry, that is wrong.');
+        };
+        go.onclick=submit;
+        inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); if(enterGoesToNextProblem(e)) nextProblem(); else submit(); } });
+        setTimeout(()=>inp.focus(),0);
+      }
+    };
+    show(0);
+  };
+  p.reveal=()=>{ over=true; const el=$('customBody'); if(el) el.querySelectorAll('button,input').forEach(x=>{ x.disabled=true; x.onclick=null; }); };
+  return p;
+}
+/* typed answers */
+const pNum=v=>{ const t=String(v).replace(/[$\s,%]/g,'').replace(/[−–]/g,'-'); return /^-?\d+(\.\d*)?$/.test(t)?Math.trunc(parseFloat(t)):null; };
+const pNear=(v,want)=>{ const n=pNum(v); return n!==null && Math.abs(n-want)<=1; };
+const pIsUnknown=v=>/^\s*unk/i.test(String(v));
+function pPctStep(want, opts){
+  opts=opts||{};
+  const allowUnk=!!opts.allowUnknown;
+  return { kind:'type', scoreKind:'probPct', oneTry:true, answer:String(want), inputmode:allowUnk?'text':'numeric',
+    q:'What percent probable is this?', ph:allowUnk?'whole number, or “unknown”':'whole number',
+    check:v=>(pNum(v)===null && !(allowUnk&&pIsUnknown(v)))
+      ? `Type a whole number (dropping fractions)${allowUnk?' or “unknown”':''}. No points lost.` : null,
+    accept:v=> want==='unknown' ? pIsUnknown(v) : (!pIsUnknown(v) && pNear(v,want)),
+    praise:'Correct!',
+    onRight:()=>opts.work||'',
+    onWrong:()=>`Sorry, the probability is ${want==='unknown'?'unknown':want+' percent'}. ${opts.work||''}`,
+    answerHtml:()=>`The probability is <b>${want==='unknown'?'unknown':want+' percent'}</b>. ${opts.work||''}` };
+}
+const P_TYPED_PCT_INSTR='TO ANSWER: Type a whole number (dropping fractions) and hit ENTER. You can be one off in either direction; the “official answer” is rounded down. Use the scratch space if you like.';
+
+/* ---- Percent ---- */
+function pPercent(){
+  const s=pSituation(false);
+  const x=pDiv(s.k*100,s.j);
+  const work=`<div class="pwork">(favorable cases × 100) / total cases<br>= (${s.k} × 100) / ${s.j} = ${x} percent.</div>`;
+  return pStepsProblem({setLine:'Set P — Probability (percent)', prompt:pPrompt(s), diceTable:!!s.table, instr:P_TYPED_PCT_INSTR},
+    [pPctStep(x,{work})]);
+}
+/* our cards / dice / coins items, typed the same way as the original's percent */
+function pTypedPct(it,kind){
+  const x=Math.floor(it.v*100+1e-9);
+  const work=`<div class="pwork">${it.exp} As a percent: ${fmtProb(it.v)} × 100 = ${(it.v*100).toFixed(it.v*100%1?1:0)} → <b>${x}</b> (fractions dropped).</div>`;
+  return pStepsProblem({setLine:`Set P — Probability (${kind})`, prompt:`${it.q}${it.viz?viz(it.viz):''}`, diceTable:!!it.twoDice, instr:P_TYPED_PCT_INSTR},
+    [pPctStep(x,{work})]);
+}
+
+/* ---- Odds: in favor / even / against, then type the odds ---- */
+function pOddsOf(k,j){
+  const b=j-k;
+  if(k===b) return {u:2};
+  const [hi,lo]=k>b?[k,b]:[b,k];
+  const g=gcd(hi,lo);
+  return {u:k>b?1:3, m:`${hi} to ${lo}`, M:g>1?`${hi/g} to ${lo/g}`:null};
+}
+function pOdds(){
+  const s=pSituation(false,{needBoth:true});
+  const od=pOddsOf(s.k,s.j);
+  const label=['','in your favor','even','against you'];
+  const ratioLine=od.u===1?'favorable cases to unfavorable cases':'unfavorable cases to favorable cases';
+  const evenNote=`The odds are even.<div class="pwork">favorable cases = unfavorable cases (${s.k} = ${s.j-s.k})</div>`;
+  const shown=od.m?`${od.m}${od.M?` (${od.M})`:''}`:'';
+  const step1={ kind:'mc', scoreKind:'probOddsMC',
+    q:'The odds are:',
+    choices:[1,2,3].map(n=>({text:label[n], correct:n===od.u})),
+    praise:'Right!',
+    onRight:()=>od.u===2?evenNote:'',
+    onWrong:()=>'Sorry, try again.',
+    stopIf:()=>od.u===2,
+    answerHtml:()=>od.u===2?evenNote:`The odds are <b>${label[od.u]}</b>.` };
+  const steps=[step1];
+  if(od.u!==2){
+    const norm=v=>String(v).toLowerCase().replace(/\s+/g,' ').trim();
+    const work=`<div class="pwork">The odds ${label[od.u]} = ${shown}<br>= ${ratioLine} (${od.u===1?s.k:s.j-s.k} to ${od.u===1?s.j-s.k:s.k}).</div>`;
+    steps.push({ kind:'type', scoreKind:'probOddsType', oneTry:true, answer:od.M||od.m,
+      q:`The odds ${label[od.u]} are:`, ph:'for example, 5 to 1',
+      check:v=>/^\s*\d+\s*to\s*\d+\s*$/i.test(v)?null:'Type the odds like “5 to 1” – put the larger number first. No points lost.',
+      accept:v=>{ const t=norm(v).replace(/\s*to\s*/,' to '); return t===od.m || (od.M&&t===od.M); },
+      praise:'Correct!',
+      onRight:()=>work,
+      onWrong:()=>`Sorry, the odds are ${od.m}. ${work}`,
+      answerHtml:()=>work });
+  }
+  return pStepsProblem({setLine:'Set P — Probability (odds)', prompt:pPrompt(s), diceTable:!!s.table,
+    instr:'TO ANSWER: First click whether the odds are in your favor, even, or against you. Then type the odds (for example, “5 to 1” – put the larger number first) and hit ENTER. In your favor = favorable cases to unfavorable cases; against you = unfavorable cases to favorable cases.'}, steps);
+}
+
+/* ---- Complex: not / and / or / given, odds → probability, "unknown" ---- */
+function pComplex(){
+  const o=rand(12);
+  let a=10+rand(81), b=10+rand(81);
+  if(o===9||o===11){ if(a>50) a=pDiv(a,2); if(b>50) b=pDiv(b,2); }
+  let c=rand(Math.max(1,Math.min(a,b)));
+  const [A,B]=[pick(P_NOUNS), pick(P_ADJS)];
+  const you=`you’re ${pArt(A)}`, youB=`you’re ${B}`;
+  let q='', ans=0, work='';
+  if(o<2){
+    const e0=pick(P_PRIMES); const bb=1+rand(e0-1), cc=e0-bb;
+    const hi=Math.max(bb,cc), lo=Math.min(bb,cc);
+    q=`The odds are ${hi} to ${lo} ${o===0?'in favor of':'against'} your being ${pArt(A)}.<br><br>What is the probability that ${you}?`;
+    ans=o===0?pDiv(hi*100,hi+lo):pDiv(lo*100,hi+lo);
+    work=`Prob that ${you} = (chances that ${you} × 100) / (chances that ${you} + chances that you aren’t)<br>= ${o===0?`(${hi} × 100) / (${hi} + ${lo})`:`(${lo} × 100) / (${hi} + ${lo})`} = ${ans}`;
+  } else if(o===2){
+    q=`The probability that you aren’t ${pArt(A)} is ${a}%.<br><br>What is the probability that ${you}?`;
+    ans=100-a; work=`Prob that ${you} = 100 − prob that you aren’t ${pArt(A)}<br>= 100 − ${a} = ${ans}`;
+  } else if(o===3){
+    q=`The probability that ${you} is ${a}%.<br><br>What is the probability that you aren’t ${pArt(A)}?`;
+    ans=100-a; work=`Prob that you aren’t ${pArt(A)} = 100 − prob that ${you}<br>= 100 − ${a} = ${ans}`;
+  } else if(o===4){
+    q=`The probability that ${you} is ${a}%.<br><br>What is the probability that you’re either ${pArt(A)} or not ${pArt(A)}?`;
+    ans=100; work=`If A is a necessary truth: Prob of A = 100`;
+  } else if(o===5){
+    q=`The probability that ${you} is ${a}%.<br><br>What is the probability that you’re both ${pArt(A)} and not ${pArt(A)}?`;
+    ans=0; work=`If A is a self-contradiction: Prob of A = 0`;
+  } else if(o===6){
+    q=`The probability that ${you} is ${a}%.<br>If ${you}, the probability that ${youB} is ${b}%.<br><br>What is the probability that you’re both ${pArt(A)} and ${B}?`;
+    ans=pDiv(a*b,100); work=`Prob that you’re both ${pArt(A)} and ${B} = prob that ${you} × (prob that ${youB} given that ${you})<br>= (${a} × ${b}) / 100 = ${ans}`;
+  } else if(o===7||o===8){
+    q=`The probability that ${you} is ${a}%.<br>The probability that ${youB} is ${b}%.<br><br>What is the probability that you’re ${o===7?'both':'either'} ${pArt(A)} ${o===7?'and':'or'} ${B}?`;
+    ans='unknown';
+    work=o===7?`To get a definite probability, we’d need to know how your being ${pArt(A)} would affect the probability of your being ${B}.`
+              :`To get a definite probability, we’d need to know the probability of your being both ${pArt(A)} and ${B} together.`;
+  } else if(o===9){
+    q=`The probability that ${you} is ${a}%.<br>The probability that ${youB} is ${b}%.<br>You couldn’t be both ${pArt(A)} and ${B}.<br><br>What is the probability that you’re either ${pArt(A)} or ${B}?`;
+    ans=a+b; work=`If you couldn’t be both ${pArt(A)} and ${B}:<br>Prob that you’re ${pArt(A)} or ${B} = prob that ${you} + prob that ${youB}<br>= ${a} + ${b} = ${ans}`;
+  } else if(o===10){
+    q=`The probability that ${you} is ${a}%.<br>The probability that ${youB} is ${b}%.<br>Your being ${pArt(A)} wouldn’t affect the probability of your being ${B}.<br><br>What is the probability that you’re both ${pArt(A)} and ${B}?`;
+    ans=pDiv(a*b,100); work=`If your being ${pArt(A)} wouldn’t affect the probability of your being ${B}:<br>Prob that you’re ${pArt(A)} and ${B} = prob that ${you} × prob that ${youB}<br>= (${a} × ${b}) / 100 = ${ans}`;
+  } else {
+    q=`The probability that ${you} is ${a}%.<br>The probability that ${youB} is ${b}%.<br>The probability that you’re both ${pArt(A)} and ${B} is ${c}%.<br><br>What is the probability that you’re either ${pArt(A)} or ${B}?`;
+    ans=a+b-c; work=`Prob that you’re ${pArt(A)} or ${B} = prob that ${you} + prob that ${youB} − prob that you’re both ${pArt(A)} and ${B}<br>= ${a} + ${b} − ${c} = ${ans}`;
+  }
+  return pStepsProblem({setLine:'Set P — Probability (complex)', prompt:q,
+    instr:'TO ANSWER: Type a whole number (dropping fractions) or “unknown.” You can be one off in either direction; the “official answer” is rounded down. Not-A = 100 − A. Necessary truth = 100; self-contradiction = 0. Both A and B = A × (B given A); if independent, A × B. Either A or B = A + B − both; if they can’t both happen, A + B. If the problem doesn’t say how A affects B (or how likely both are), the answer is “unknown.”'},
+    [pPctStep(ans,{allowUnknown:true, work:`<div class="pwork">${work}</div>`})]);
+}
+
+/* ---- Gamble: expected gain in dollars ---- */
 function pGamble(){
-  if(Math.random()<0.5){
-    const setup=pick([
-      {p:1/4, win:60, ev:'drawing a spade', v2:cardHtml('A','♠')+cardBack()},
-      {p:1/2, win:24, ev:'drawing a red card', v2:cardHtml('Q','♥')+cardBack()},
-      {p:1/6, win:90, ev:'rolling a six'},
-      {p:1/3, win:36, ev:'rolling a 5 or 6'},
-    ]);
-    const stake=pick([6,12,18]);
-    const eg=setup.win*setup.p - stake*(1-setup.p);
-    // Round to cents first so float noise (e.g. -1.78e-15) never becomes "−$0"
-    const fmt$=x=>{const c=Math.round(x*100)/100; return (c<0?'−$':'$')+Math.abs(c).toFixed(2).replace(/\.00$/,'');};
-    const a=fmt$(eg);
-    const D=uniqStrings([fmt$(setup.win*setup.p), fmt$(eg+stake), fmt$(-eg), fmt$(setup.win*setup.p-stake)]).filter(x=>x!==a);
-    return { setLine:'Set P — Probability (gamble)', scratch:true,
-      prompt:`You bet $${stake} on ${setup.ev}: you collect $${setup.win} if it happens, and forfeit your $${stake} if not. What is the expected gain of this bet?${setup.v2?viz(setup.v2):''}`,
-      instr:`Expected gain = (probability of winning · amount won) − (probability of losing · amount lost). A positive expected gain means the bet wins money in the long run.`,
-      mode:'mc', noKeyboard:true,
-      choices: mc(a, D),
-      explain:()=>`Answer: <b>${a}</b> — ($${setup.win} · ${fmtProb(setup.p)}) − ($${stake} · ${fmtProb(1-setup.p)}) = ${fmt$(setup.win*setup.p)} − ${fmt$(stake*(1-setup.p)).replace('−','')} = ${a}.` };
-  }
-  const q=pick([10,20,25,50]);
-  const fee=pick([80,100,120,160]);
-  const base=200, fixedExtra=pick([30,50,70]);
-  const costA=base+fixedExtra, costB=base+fee*q/100;
-  if(costA===costB) return pGamble();
-  const better= costA<costB?'A':'B';
-  const a=`Ticket ${better} (expected cost $${Math.min(costA,costB)})`;
-  const D=[`Ticket ${better==='A'?'B':'A'} (expected cost $${Math.max(costA,costB)})`,
-    `They're equal`, `Ticket B (expected cost $${base+fee})`];
-  return { setLine:'Set P — Probability (decide)', scratch:true,
-    prompt:`Ticket A costs $${costA} and lets you change your travel date freely. Ticket B costs $${base} but adds a $${fee} charge if you change the date. There's a ${q}% chance you'll have to change. In terms of expected cost, which is the better deal?`,
-    instr:`Expected cost of B = base price + (charge · probability of paying it). Compare with A's fixed price. (Expected gain isn't everything — "better safe than sorry" can justify the fixed price if the worst case would ruin you.)`,
-    mode:'mc', noKeyboard:true,
-    choices: mc(a, D),
-    explain:()=>`Answer: <b>${a}</b>. A costs $${costA} no matter what; B's expected cost = $${base} + ($${fee} · ${q}%) = $${costB.toFixed(2).replace(/\.00$/,'')}.` };
+  const s=pSituation(true,{needBoth:true});
+  const k=s.k, j=s.j, b=j-k;
+  const i=(5+rand(18))*10;                          // your bet: $50 … $220
+  const fair=pDiv(i*b,k);
+  const tweak=pick([d=>d-pDiv(d,3),d=>d-pDiv(d,5),d=>d-pDiv(d,7),d=>d+pDiv(d,7),d=>d+pDiv(d,5),d=>d+pDiv(d,3)]);
+  const a=Math.max(1,tweak(fair));                  // what you win
+  const c=pDiv(a*k-i*b,j);
+  const money=n=>(n<0?'−$':'$')+Math.abs(n);
+  const work=`<div class="pwork"><div class="pfrac"><span>the money you’d win × chances to win − the money you’d lose × chances to lose</span><span>total chances</span></div>= (${a} × ${k} − ${i} × ${b}) / ${j} = ${c}</div>`;
+  return pStepsProblem({setLine:'Set P — Probability (gamble)',
+    prompt:`${pPrompt(s)}<div class="pbet">You get <b>$${a}</b> if you win. You bet <b>$${i}</b>.</div>`, diceTable:!!s.table,
+    instr:'TO ANSWER: Type your expected gain in whole dollars (dropping fractions; use “-” for losses) and hit ENTER. You can be one off in either direction. Expected gain = (money you’d win × chances to win − money you’d lose × chances to lose) / total chances.'},
+    [{ kind:'type', scoreKind:'probPct', oneTry:true, answer:String(c), inputmode:'text', q:'Your expected gain is: $', ph:'(use “-” for losses)',
+       check:v=>pNum(v)===null?'Type a whole number of dollars (use “-” for losses). No points lost.':null,
+       accept:v=>pNear(v,c), praise:'Your answer is correct!',
+       onRight:()=>work, onWrong:()=>`Sorry, your expected gain is ${money(c)}. ${work}`,
+       answerHtml:()=>`Your expected gain is <b>${money(c)}</b>. ${work}` }]);
 }
-/* ---- induction: statistical syllogism, sample projection, analogy, Mill ---- */
-function pInduct(){
-  const kind=pick(['stat','sample','analogy','mill']);
-  if(kind==='stat'){
-    const n=pick([70,80,90,95]);
-    const c=pick(CATS); const adj=pick(ADJ); const nm=pick(NAMES);
-    return { setLine:'Set P — Probability (induction)', scratch:true,
-      prompt:`${n}% of ${c.pl} are ${adj.w}. ${nm.nm} is ${article(c.sg)}. This is all we know about the matter. What follows?`,
-      instr:`Statistical syllogism: "N% of A's are B's; X is an A; that's all we know ∴ it's N% probable that X is a B." The "that's all we know" premise matters — extra information changes the probability.`,
-      mode:'mc', noKeyboard:true,
-      choices: mc(`It's ${n}% probable that ${nm.nm} is ${adj.w}`,
-        [`${nm.nm} is certainly ${adj.w}`, `It's ${100-n}% probable that ${nm.nm} is ${adj.w}`, `Nothing follows at all`]),
-      explain:()=>`A statistical syllogism gives a probable conclusion: <b>${n}% probable</b> that ${nm.nm} is ${adj.w}.` };
+
+/* ---- Decide: which of two options is better by expected value ---- */
+function pDecide(){
+  const o=rand(7);
+  const firm=pick(P_FIRMS), place=pick(P_TEAMS);
+  const pct=n=>`${n}%`;
+  let A='', B='', label='', fa=null, fb=null, va=0, vb=0, lower=false, pctAns=false, head='';
+  const nudge=x=>pick([x-pDiv(x,5),x-pDiv(x,7),x+pDiv(x,7),x+pDiv(x,5)]);
+  if(o===0){
+    const j=5+rand(6), i=(5+rand(11))*10, a=1+rand(5), c0=100-a;
+    const b=nudge(pDiv(j+c0,a));
+    A=`You invest $${i} in the new ${firm} enterprise. You have a ${a}% chance of making ${b} times your investment. You have a ${c0}% chance of losing everything.`;
+    B=`You invest your $${i} in the first bank of ${place}. You’re sure to get ${j}% interest. There’s no risk of losing your money.`;
+    label='Expected gain: $'; va=pDiv(a*b*i-c0*i,100); vb=pDiv(j*i,100);
+    fa=`(${a} × ${b} × ${i} − ${c0} × ${i}) / 100`; fb=`(${j} × ${i}) / 100`;
+  } else if(o===1){
+    let i,a,d,b,c0,j,g=0;
+    do{ j=5+rand(6); i=(6+rand(4))*10; a=(2+rand(7))*5; d=(1+rand(4))*10; b=nudge(pDiv(100*j+a*d,i)); c0=100-a-b; }while(c0<0&&g++<50);
+    A=`You invest everything in ${firm}. You have a ${b}% chance to earn ${i}%, a ${a}% chance of losing ${d}%, and a ${c0}% chance that you won’t gain or lose.`;
+    B=`You put everything in the first bank of ${place}. You’re sure to get ${j}% interest. There’s no risk of losing your money.`;
+    label='Expected percent gain:'; va=pDiv(b*i-a*d,100); vb=j; pctAns=true;
+    fa=`(${b} × ${i} − ${a} × ${d}) / 100`; fb=`${j}`;
+  } else if(o===2){
+    const i=(30+rand(31))*10, a=(1+rand(4))*10, b=nudge(i+pDiv(i*a,100));
+    A=`You buy a $${i} computer from ${firm}. It will be a total loss if it goes bad, forcing you to spend another $${i}. There’s a ${a}% chance of it going bad over the next five years.`;
+    B=`You buy a $${b} computer from ${place} Computers. This distinguished company offers free repairs or replacement over a five year period.`;
+    label='Expected 5-year cost: $'; va=i+pDiv(a*i,100); vb=b; lower=true;
+    fa=`${i} + ((${a} × ${i}) / 100)`; fb=`${b}`;
+  } else if(o===3){
+    const i=(30+rand(31))*10, a=2+rand(4), c0=5+rand(11), b=nudge(pDiv(a*i+100*c0,i));
+    A=`You buy theft insurance for your $${i} ${firm} computer. This covers replacement costs. They charge you ${a}% of this cost, plus $${c0}.`;
+    B=`You don’t buy insurance. In case of theft, you need to buy another $${i} computer. In ${place}, where you live, the chance of theft is ${b}%.`;
+    label='Expected cost: $'; va=pDiv(a*i,100)+c0; vb=pDiv(b*i,100); lower=true;
+    fa=`((${a} × ${i}) / 100) + ${c0}`; fb=`(${b} × ${i}) / 100`;
+  } else if(o===4){
+    const i=(30+rand(31))*10, a=pDiv(i*(60+rand(29)),100), j=(i-a)+pDiv(i*(5+rand(19)),100), b=nudge(pDiv(100*(i-a),j));
+    A=`You’re flying to ${place}. You buy a regular round-trip ticket for $${i}. This allows you to change the return date for no extra charge.`;
+    B=`You buy a round-trip excursion ticket for $${a}. To change the return date would cost $${j} more. It’s ${b}% likely that you’ll have to change the return.`;
+    label='Expected cost: $'; va=i; vb=a+pDiv(b*j,100); lower=true;
+    fa=`${i}`; fb=`${a} + ((${b} × ${j}) / 100)`;
+  } else if(o===5){
+    const a=30+rand(21), c0=78-a, j=a+10+rand(16), b=Math.min(99,nudge(pDiv(a*100,j)));
+    A=`We’re 2 points behind with a minute left. It’s our ball, fourth and one, on the ${place} ${c0}. We go for the field goal, having a ${a}% chance from here.`;
+    B=`We go for the first down, with a ${b}% chance to make it. If we succeed, we’ll go for the field goal from a closer distance, with a ${j}% chance to make it.`;
+    label='Probability of making goal:'; va=a; vb=pDiv(b*j,100); pctAns=true;
+    fa=`${a}`; fb=`(${b} × ${j}) / 100`;
+  } else {
+    let a,d,i,c0,j,b,g=0;
+    do{ a=(8+rand(6))*5; d=100-a; i=60+rand(21); c0=20+rand(21); j=55+rand(16); b=nudge(pDiv(a*i+d*c0-d*j,a)); }while((b<1||b>99)&&g++<50);
+    head=`We’re 2 points ahead with a minute left. ${place} is going for it on fourth down. They’re ${a}% likely to pass and ${d}% likely to run.`;
+    A=`We defense the pass. We are ${i}% likely to stop a pass and ${c0}% likely to stop a run.`;
+    B=`We defense the run. We are ${b}% likely to stop a pass and ${j}% likely to stop a run.`;
+    label='Probability to stop them:'; va=pDiv(a*i+d*c0,100); vb=pDiv(a*b+d*j,100); pctAns=true;
+    fa=`(${a} × ${i} + ${d} × ${c0}) / 100`; fb=`(${a} × ${b} + ${d} × ${j}) / 100`;
   }
-  if(kind==='sample'){
-    const n=pick([60,75,85,90]);
-    const c=pick(CATS); const adj=pick(ADJ);
-    return { setLine:'Set P — Probability (induction)', scratch:true,
-      prompt:`${n}% of examined ${c.pl} are ${adj.w}, and a large and varied group of ${c.pl} has been examined. What follows?`,
-      instr:`Sample-projection syllogism: from a large and varied sample, project the sample's rate onto the whole group — as a probable, rough conclusion.`,
-      mode:'mc', noKeyboard:true,
-      choices: mc(`Probably roughly ${n}% of all ${c.pl} are ${adj.w}`,
-        [`Exactly ${n}% of all ${c.pl} are ${adj.w}`, `All ${c.pl} are ${adj.w}`, `The next ${c.sg} examined must be ${adj.w}`]),
-      explain:()=>`Projecting a large, varied sample: <b>probably roughly ${n}%</b> of all ${c.pl} are ${adj.w}.` };
-  }
-  if(kind==='analogy'){
-    const adj=pick(ADJ);
-    return { setLine:'Set P — Probability (induction)', scratch:true,
-      prompt:`Most of the things true of the first café you visited are also true of the second. The first café is ${adj.w==='rich'?'popular':adj.w}. This is all we know about the matter. What follows?`,
-      instr:`Analogy syllogism: "Most things true of X are true of Y; X is A; that's all we know ∴ probably Y is A."`,
-      mode:'mc', noKeyboard:true,
-      choices: mc(`Probably the second café is ${adj.w==='rich'?'popular':adj.w} too`,
-        [`The second café is certainly ${adj.w==='rich'?'popular':adj.w}`, `The second café is probably not ${adj.w==='rich'?'popular':adj.w}`, `Nothing at all follows`]),
-      explain:()=>`Analogy gives a probable conclusion — <b>probably</b> the second café matches the first.` };
-  }
-  const mills=[
-    {sc:`Several picnickers got sick, and eating the potato salad is the only additional factor that occurred if and only if the sickness occurred.`,
-     a:'Method of agreement', exp:`A recurring effect and one factor present in all and only those cases → probably causally related.`},
-    {sc:`Two hikers had identical days except that only the first drank from the stream — and only the first got sick.`,
-     a:'Method of difference', exp:`Cases alike except for one factor and the effect → that factor is probably (part of) the cause.`},
-    {sc:`Rosa ate the potato salad but did not get sick.`,
-     a:'Method of disagreement', exp:`Factor without the effect → the factor doesn't necessarily cause the effect.`},
-    {sc:`The more coffee the testers drank, the more alert they scored — in step, case after case.`,
-     a:'Method of variation', exp:`Two factors changing together in a regular way → probably causally connected (one way, the other, or via a third factor).`},
-  ];
-  const m=pick(mills);
-  return { setLine:'Set P — Probability (Mill’s methods)', scratch:true,
-    prompt:`Which of Mill's methods does this reasoning use?<br><span class="argblock"><i>${m.sc}</i></span>`,
-    instr:`Mill's methods: <b>agreement</b> (factor present in all and only the cases), <b>difference</b> (otherwise-identical cases differ in one factor and the effect), <b>disagreement</b> (factor occurs without the effect — so no necessary causation), <b>variation</b> (factors change together).`,
-    mode:'mc', noKeyboard:true,
-    choices: mc(m.a, mills.filter(x=>x.a!==m.a).map(x=>x.a)),
-    explain:()=>`<b>${m.a}</b>. ${m.exp}` };
+  const show=n=>pctAns?`${n}`:(n<0?'−$':'$')+Math.abs(n);
+  const verdict=va===vb?'Both options are equal!':((lower?va<vb:va>vb)?'Option A is better!':'Option B is better!');
+  const verdictHtml=`<div class="pverdict"><b>${verdict}</b> ${lower?'(Lower expected cost is better.)':'(Higher is better.)'}</div>`;
+  const step=(which,want,f)=>({ kind:'type', scoreKind:'probDecide', oneTry:true, answer:String(want),
+    q:`Option ${which}. ${label}`, ph:pctAns?'whole number':'whole dollars',
+    check:v=>pNum(v)===null?'Type a whole number (dropping fractions). No points lost.':null,
+    accept:v=>pNear(v,want), praise:'Correct!',
+    onRight:()=>`<div class="pwork">${f} = ${want}</div>${which==='B'?verdictHtml:''}`,
+    onWrong:(v)=>`Sorry, “${String(v).trim()}” isn’t right.<div class="pwork">${f} = ${want}</div>${which==='B'?verdictHtml:''}`,
+    answerHtml:()=>`Option ${which}: ${label} <b>${show(want)}</b> <span class="muted">(${f})</span>${which==='B'?verdictHtml:''}` });
+  return pStepsProblem({setLine:'Set P — Probability (decide)',
+    prompt:`${head?`<p>${head}</p>`:''}<div class="poptions"><div><b>Option A.</b> ${A}</div><div><b>Option B.</b> ${B}</div></div>`,
+    instr:'TO ANSWER: For each option, type its expected value (a whole number, dropping fractions; you can be one off either way) and hit ENTER. Then see which option is better. Expected value = add up (value of each outcome × its probability).'},
+    [step('A',va,fa), step('B',vb,fb)]);
 }
-const P_ACTIVITIES={cards:pCards, dice:pDice, coins:pCoins, odds:pOdds, rules:pRules, gamble:pGamble, induct:pInduct};
+
+/* ---- Varied: Percent, Odds, Complex, Gamble, Decide mixed ---- */
+function pVaried(){
+  const kinds=[pPercent,pOdds,pComplex,pGamble,pDecide];
+  let i=rand(5); if(i===session.pVariedLast) i=(i+1+rand(4))%5;
+  session.pVariedLast=i;
+  return kinds[i]();
+}
+
+/* ---- Induction and Mill: name the kind, then correct or incorrect form ----
+   Generated as in the original: many arguments are flawed on purpose, and
+   the feedback names the flaw. */
+const IND_ACTS=[ // cause noun, base verb phrase, 3rd person, gerund
+  ['backpacking','backpack','backpacks','backpacking'],['running','run','runs','running'],['swimming','swim','swims','swimming'],
+  ['beer','drink beer','drinks beer','drinking beer'],['coffee','drink coffee','drinks coffee','drinking coffee'],
+  ['vitamin C','take vitamin C','takes vitamin C','taking vitamin C'],['TV','watch TV','watches TV','watching TV'],
+  ['LogiCola','do LogiCola','does LogiCola','doing LogiCola'],['spinach','eat spinach','eats spinach','eating spinach'],
+  ['asparagus','eat asparagus','eats asparagus','eating asparagus'],['wheat germ','eat wheat germ','eats wheat germ','eating wheat germ']];
+const IND_TRAITS=[ // adjective/complement, noun, cause-of form, uses "has"
+  ['bald','baldness'],['forgetful','forgetfulness'],['lazy','laziness'],['obese','obesity'],['happy','happiness'],['angry','anger'],
+  ['ugly','ugliness'],['intelligent','intelligence'],['rich','riches','having riches'],['beautiful','beauty'],
+  ['a cold','colds','having a cold',1],['hiccups','hiccups','having hiccups',1],['warts','warts','having warts',1],['bad breath','bad breath','',1],
+  ['stomach flu','stomach flu','',1],['acne','acne','',1],['heart attacks','heart attacks','having heart attacks',1]];
+const IND_NAMES1=['Smith','Jones','Brown','Greene','Fernandez','Connolly','Wong','Weiss','Stevens','Wilson','Gensler'];
+const IND_NAMES2=['Hilton','Miller','Boyle','Hughes','Martinez'];
+const IND_KINDS=[
+  {key:'analogy', name:'analogy syllogism', label:'Analogy syllogism', form:['Analogy',['Most of the things true of x are also true of y.','x is A.','This is all we know about the matter.'],['Probably y is A.']]},
+  {key:'sample', name:'sample-projection syllogism', label:'Sample-projection syllogism', form:['Sample projection',['N% of examined A’s are B’s.','A large and varied group of A’s has been examined.'],['Probably roughly N% of all A’s are B’s.']]},
+  {key:'stat', name:'statistical syllogism', label:'Statistical syllogism', form:['Statistical',['N% of A’s are B’s.','x is an A.','This is all we know about the matter.'],['It’s N% probable that x is B.']]},
+  {key:'agree', name:'agreement method', label:'Agreement method', form:['Agreement',['A occurs more than once.','B is the only additional factor that occurs if and only if A occurs.'],['Probably B causes A, or A causes B.']]},
+  {key:'diff', name:'difference method', label:'Difference method', form:['Difference',['A occurs in the first case but not the second.','The cases are otherwise identical, except that B also occurs in the first case but not in the second.'],['Probably B is (or is part of) the cause of A, or A is (or is part of) the cause of B.']]},
+  {key:'disagree', name:'disagreement method', label:'Disagreement method', form:['Disagreement',['A occurs in some case.','B doesn’t occur in that case.'],['A doesn’t necessarily cause B.']]},
+  {key:'vary', name:'variation method', label:'Variation method', form:['Variation',['A changes in a certain way if and only if B also changes in a certain way.'],['Probably B causes A, or A causes B, or some C causes both A and B.']]}];
+function indFormHtml(k){
+  const [nm,prem,concl]=k.form;
+  return `<table class="pform"><tr><td class="pform-n" rowspan="${prem.length+concl.length}">${nm}</td><td>${prem[0]}</td></tr>`+
+    prem.slice(1).map(x=>`<tr><td>${x}</td></tr>`).join('')+
+    `<tr><td>${SYM.therefore} ${concl[0]}</td></tr></table>`;
+}
+function indArgument(kindIdx){
+  const [a,c,b,d]=pick(IND_ACTS);
+  const tr=pick(IND_TRAITS), has=!!tr[3];
+  const f=`${has?'has':'is'} ${tr[0]}`, h=`${has?'have':'are'} ${tr[0]}`, hNeg=`${has?'don’t have':'aren’t'} ${tr[0]}`;
+  const E=tr[1], Acause=tr[2]||tr[1];
+  const lines=[]; const flaws=[]; let ok=false;
+  const r=n=>rand(n);
+  if(kindIdx===0){                                   // analogy
+    const grp=Math.random()<0.5; const v=r(3);
+    let o=pick(IND_NAMES1), u=pick(IND_NAMES2);
+    if(grp){ o='a first group'; u='a second group'; }
+    const O=o[0].toUpperCase()+o.slice(1);
+    lines.push(v===0?`We’ve observed that most of the things true of ${o} are also true of ${u}.`:
+               v===1?`${O} and ${u} are alike in most ways.`:`In comparing ${o} and ${u}, we find that they tend to be very similar.`);
+    const subj1=grp?'The first group':o, subj2=grp?'the second group':u;
+    lines.push(`${subj1} ${b}.`);
+    const x=r(5);
+    if(x<2||x===4) lines.push('This is all we know about the matter.');
+    lines.push(x<3?`So probably ${subj2} also ${b}.`:`So ${subj2} also ${b}.`);
+    ok=x<2;
+    if(x===2||x===3) flaws.push('Is this all we know about the matter?');
+    if(x===3||x===4) flaws.push('We need “probably” in the conclusion.');
+  } else if(kindIdx===1){                            // sample projection
+    const u=2+r(98), x=r(11), v=r(3);
+    const adj=x===5?' large':x===6?' varied':x===7?'':' large and varied';
+    const pr=x===8?' probably':x===9?' roughly':x===10?'':' probably roughly';
+    ok=x<5;
+    if(v===0){
+      lines.push(`${u} percent of the people who ${c} that we’ve examined ${h}.`);
+      if(x!==7) lines.push(`We’ve examined a${adj} group of people who ${c}.`);
+      lines.push(`So${pr} ${u} percent of all those who ${c} ${h}.`);
+    } else if(v===1){
+      lines.push(`We’ve observed a${adj} group of people who ${c}. ${u} percent of those in our sample ${h}. So${pr} ${u} percent of those who ${c} ${h}.`);
+    } else {
+      lines.push(`We’ve studied a${adj} sample of people who ${c} and have found that ${u} percent of these people ${h}. So we conclude that${pr} ${u} percent of those who ${c} ${h}.`);
+    }
+    if(x===5) flaws.push('Is our sample varied?');
+    if(x===6) flaws.push('Is our sample large enough?');
+    if(x===7) flaws.push('Is our sample large and varied?');
+    if(x>7) flaws.push(`We need “probably roughly ${u} percent” in the conclusion.`);
+  } else if(kindIdx===2){                            // statistical
+    const u=51+r(49), v=r(3), o=pick(IND_NAMES1);
+    lines.push(v===0?`We know that ${u} percent of those who ${c} ${h} and that ${o} ${b}.`:
+               v===1?`${u} percent of the people who ${c} ${h}. ${o} ${b}.`:`${o} ${b} and ${u} percent of those who ${c} ${h}.`);
+    const x=r(5);
+    if(x<3) lines.push('This is all we know about the matter.');
+    lines.push((x<2||x===4)?`So it’s ${u} percent probable that ${o} ${f}.`:`So ${o} ${f}.`);
+    ok=x<2;
+    if(x>2) flaws.push('Is this all we know about the matter?');
+    if(x===2||x===3) flaws.push(`We need “it’s ${u} percent probable” in the conclusion.`);
+  } else if(kindIdx===3){                            // agreement
+    const v=r(3);
+    lines.push(v===0?`We’ve observed various cases of ${E}. We find that`:v===1?`We’ve discovered in various cases of ${E} that`:`In various examples of ${E}, we’ve found that`);
+    const x=r(9);
+    if(x<4||x===6||x===7) lines.push(`${d} is the only additional factor that occurs if and only if the person ${f}.`);
+    if(x===4) lines.push(`everyone who ${b} ${f}, and everyone who ${f} ${b}.`);
+    if(x===5||x===8) lines.push(`everyone who ${b} ${f}.`);
+    if(x<6) lines.push(`So probably ${d} causes ${E}, or ${Acause} causes one to ${c}.`);
+    if(x===7) lines.push(`So ${d} causes ${E}, or ${Acause} causes one to ${c}.`);
+    if(x===6||x===8) lines.push(`So probably ${d} causes ${E}.`);
+    ok=x<4;
+    if(x===4) flaws.push(`Are other factors besides ${d} peculiar to the cases of ${E}?`);
+    if(x===5||x===8){ flaws.push(`Does everyone who ${f} ${c}?`); flaws.push(`Do other factors correlate with ${E}?`); }
+    if(x===6||x===8) flaws.push(`Maybe ${Acause} causes one to ${c}.`);
+    if(x===7) flaws.push('We need “probably” in the conclusion.');
+  } else if(kindIdx===4){                            // difference
+    const g='or is part of the cause of', v=r(3);
+    lines.push((v===0?'We’ve compared two groups of people. We find that people':v===1?'We’ve discovered in comparing two groups that people':'In comparing two groups, we’ve found that people')+
+      ` in the first group ${h}, but not those in the second.`);
+    const x=r(7);
+    const pre=x===3?`The first group ${b} but not the second.`:`The two groups are otherwise identical, except that the first group ${b} but not the second.`;
+    let concl;
+    if(x<4) concl=`So ${x===4?'':'probably '}${a} causes (${g}) ${E}, or ${Acause} causes (${g}) ${d}.`;
+    if(x===4) concl=`So ${a} causes (${g}) ${E}, or ${Acause} causes (${g}) ${d}.`;
+    if(x===5) concl=`So probably ${a} causes (${g}) ${E}.`;
+    if(x===6) concl=`So probably ${a} causes ${E}, or ${Acause} causes one to ${c}.`;
+    lines.push(`${pre} ${concl}`);
+    ok=x<3;
+    if(x===3) flaws.push('Were the two groups otherwise identical?');
+    if(x===4) flaws.push('We need “probably” in the conclusion.');
+    if(x===5) flaws.push(`Maybe ${Acause} causes (${g}) ${d}.`);
+    if(x===6) flaws.push(`Maybe ${a} is only part of the cause of ${E}, or maybe ${Acause} is only part of the cause of ${d}.`);
+  } else if(kindIdx===5){                            // disagreement (always correct form)
+    const x=r(3);
+    lines.push(x===0?`We’ve discovered that there are people that ${c} but ${hNeg}. So ${d} doesn’t necessarily cause ${E}.`:
+               x===1?`You ${c} but ${hNeg}. So it’s false that ${d} necessarily causes ${E}.`:
+                     `We’ve found groups that ${c} but ${hNeg}. So ${d} doesn’t always cause ${E}.`);
+    ok=true;
+  } else {                                           // variation
+    const v=r(3);
+    lines.push(v===0?`After observing various groups, we’ve found that the more that people ${c} the more they ${h}.`:
+               v===1?`We’ve discovered that the more that a person ${b} the more the person ${f}.`:`The more that you ${c} the more you ${h}.`);
+    const x=r(5);
+    if(x<2||x===4) lines.push(`So probably ${d} causes ${E},`);
+    if(x===2) lines.push(`So ${d} causes ${E},`);
+    if(x===3) lines.push(`So probably ${d} causes ${E}.`);
+    if(x<3) lines.push(`or ${Acause} causes one to ${c}, or some third thing causes both.`);
+    if(x===4) lines.push(`or ${Acause} causes one to ${c}.`);
+    ok=x<2;
+    if(x===2) flaws.push('We need “probably” in the conclusion.');
+    if(x===3) flaws.push(`Maybe ${Acause} causes one to ${c}, or some third thing causes both.`);
+    if(x===4) flaws.push('Maybe some third thing causes both.');
+  }
+  const capFirst=s=>s.charAt(0).toUpperCase()+s.slice(1);
+  return {text:lines.map((l,i)=>i===0?capFirst(l):l).join('<br>'), ok, flaws};
+}
+function pInductive(which){
+  const pool=which==='induct'?[0,1,2]:which==='mill'?[3,4,5,6]:[0,1,2,3,4,5,6];
+  const ki=pick(pool), K=IND_KINDS[ki];
+  const arg=indArgument(ki);
+  const isMill=ki>=3;
+  const formNote=()=>`<div class="pformwrap">${ki===5?'':`This is ${arg.ok?'a <i>correct</i>':'an <i>incorrect</i>'} form of the ${K.name}.`}${indFormHtml(K)}${ki===5?'<div>(Correct form.)</div>':''}${arg.flaws.length?`<div class="pflaw">${arg.flaws.join(' ')}</div>`:''}</div>`;
+  const step1={ kind:'mc', scoreKind:'inductKind',
+    q:'Which type of reasoning does this illustrate?',
+    choices:pool.map(i=>({text:IND_KINDS[i].label, correct:i===ki})),
+    praise:'Correct!',
+    onRight:()=>`This is an example of the ${K.name}.${ki===5?formNote():''}`,
+    onWrong:(c)=>`Sorry, ${c.text.toLowerCase()} is wrong. Try again.`,
+    answerHtml:()=>`This is an example of the <b>${K.name}</b>.` };
+  const steps=[step1];
+  if(ki!==5){
+    steps.push({ kind:'mc', scoreKind:'inductForm', oneTry:true,
+      q:'Is this a correct or incorrect form?',
+      choices:[{text:`Correct form of ${K.name}.`, correct:arg.ok},{text:`Incorrect form of ${K.name}.`, correct:!arg.ok}],
+      praise:'You got this one right!',
+      onRight:()=>formNote(),
+      onWrong:()=>`Sorry, you got this one wrong! ${formNote()}`,
+      answerHtml:()=>formNote() });
+  } else steps[0].answerHtml=()=>`This is an example of the <b>${K.name}</b>.${formNote()}`;
+  const nm=which==='induct'?'induction':which==='mill'?'Mill':'induction & Mill';
+  return pStepsProblem({setLine:`Set P — Probability (${nm})`, scratch:false,
+    prompt:`<div class="pargument">${arg.text}</div>`,
+    instr:`TO ANSWER: First click the kind of reasoning. Then say whether the argument is in correct form. ${isMill||which!=='induct'?'Mill’s methods: <b>agreement</b> (one additional factor occurs if and only if the effect does), <b>difference</b> (otherwise identical cases differ in one factor and the effect), <b>disagreement</b> (a factor occurs without the effect, so it doesn’t necessarily cause it), <b>variation</b> (two factors change together). ':''}${which!=='mill'?'Inductive forms: <b>statistical</b> (N% of A’s are B’s; x is an A; this is all we know ∴ it’s N% probable that x is B), <b>sample projection</b> (from a large and varied sample ∴ probably roughly N%), <b>analogy</b> (most things true of x are true of y; x is A; this is all we know ∴ probably y is A). ':''}Watch for a missing “probably,” a missing “this is all we know,” a sample that isn’t large and varied, and causal conclusions that leave out other explanations.`},
+    steps);
+}
+function pInduct(){ return pInductive('induct'); }
+function pMill(){ return pInductive('mill'); }
+function pBothIM(){ return pInductive('both'); }
+const P_ACTIVITIES={percent:pPercent, odds:pOdds, complex:pComplex, gamble:pGamble, decide:pDecide, varied:pVaried,
+  induct:pInduct, mill:pMill, both:pBothIM, cards:pCards, dice:pDice, coins:pCoins, rules:pRules};
 function genP(){
-  const m=state.pMode||'cards';
-  return (P_ACTIVITIES[m]||pCards)();
+  const m=state.pMode||'percent';
+  return (P_ACTIVITIES[m]||pPercent)();
 }
 function fmtProb(v){
   // show as reduced fraction if clean, else 2-dp
@@ -8364,7 +9022,7 @@ let state = load() || { name:'', place:'', level:9, keyboard:true, sound:true, h
   jMode:'basic', kMode:'proof', lMode:'mixed', mMode:'mixed', nMode:'mixed', pMode:'mixed', rMode:'spot',
   bImport:'modern', modalSystem:'S5', notation:'gensler', univ:'paren', completed:{} };
 const STATE_DEFAULTS={ bMode:'sym', cMode:'easy', dMode:'eval', eMode:'sym', fMode:'s', gMode:'both', gLevel:'easier',
-  hMode:'easy', iMode:'easier', jMode:'basic', kMode:'both', kLevel:'easier', lMode:'imp', mMode:'imp', nMode:'belief', pMode:'cards', rMode:'spot',
+  hMode:'easy', iMode:'easier', jMode:'basic', kMode:'both', kLevel:'easier', lMode:'imp', mMode:'imp', nMode:'belief', oMode:'believe', pMode:'percent', rMode:'spot',
   sMode:'basics', tMode:'lang',
   bImport:'modern', modalSystem:'S5', notation:'gensler', univ:'paren', treeClose:'manual', treeDN:false,
   gStars:'auto', gTrain:false, iKind:'both', hHints:true, autoJust:true };
@@ -10151,15 +10809,25 @@ const MENU={
      acts:[['belief','Belief translations','u:A — believing, not-believing, suspending'],
            ['will','Willing translations','Underline after the colon: wanting, resolving, acting-to'],
            ['rat','Rationality translations','Evident (O) and reasonable (R) belief; knowledge']]},
-  O:{type:true},
+  O:{key:'oMode', type:true,
+     acts:[['believe','Believing','u:A — consistency in believing'],
+           ['will','Willing','Underlined letters: consistency in willing'],
+           ['rat','Rationality','O / R on beliefs: D, Du, DDu worlds'],
+           ['mix','Mixed','All three kinds mixed']]},
   P:{key:'pMode',
-     acts:[['cards','Cards','Draws from a 52-card deck'],
+     acts:[['percent','Percent','Cards, dice, coins, and stated facts — type the percent'],
+           ['odds','Odds','In your favor, even, or against — then type the odds'],
+           ['complex','Complex','Not, and, or, given — type the percent or “unknown”'],
+           ['gamble','Gamble','Expected gain of a bet, in dollars'],
+           ['decide','Decide','Which of two options is better, by expected value'],
+           ['varied','Varied p–d','Percent, odds, complex, gamble, and decide mixed'],
+           ['induct','Induction','Analogy, sample projection, statistical syllogism: name it, then judge its form'],
+           ['mill','Mill','Agreement, difference, disagreement, variation: name it, then judge its form'],
+           ['both','Both i–m','Induction and Mill mixed'],
+           ['cards','Cards','Draws from a 52-card deck, with pictures'],
            ['dice','Dice','One die or two'],
            ['coins','Coins','Flips and combinations'],
-           ['odds','Odds','Against / even / in favor; odds ↔ probability'],
-           ['rules','Rules','not / and / or / given / necessary'],
-           ['gamble','Gamble & decide','Expected gain, better deals'],
-           ['induct','Induction','Statistical syllogisms, analogy, Mill’s methods']]},
+           ['rules','Rules','not / and / or / given / necessary; odds → probability']]},
   Q:{intro:true},
   R:{key:'rMode',
      acts:[['spot','Spot the fallacy','Name the fallacy in a passage'],
@@ -10560,6 +11228,9 @@ const SCORE_PROFILES={
   probOddsType: {right:5,  wrong:'twoL', tries:1},
   probPct:      {right:10, wrong:'twoL', tries:1},
   probMC:       {right:10, wrong:'half2L'},
+  probDecide:   {right:5,  wrong:'oneL', tries:1},
+  inductKind:   {right:5,  wrong:'half2L', noCreditAfterMiss:true},
+  inductForm:   {right:5,  wrong:'twoL', tries:1},
   dTable:       {right:10, wrong:'half2L'},
   dUnknown:     {right:10, wrong:'half2L'},
   venn:         {right:10, wrong:'half2L'},
@@ -11087,8 +11758,8 @@ const INFO={
   L:`Underline the agent letter for an imperative: "Au" = you're doing A (indicative); "A<u>u</u>" = do A (imperative). Underline imperative parts but not factual ones: "(A ${SYM.horseshoe} B<u>u</u>)" = if you're (in fact) doing A, then do B. The don't-combine form "${SYM.not}(A<u>u</u> ${SYM.and} B<u>u</u>)" forbids a combination without saying which part to drop. "O" = ought, "R" = all right; wrong = ${SYM.not}R = O${SYM.not}; order matters: ${SYM.not}O (not obligatory) ≠ O${SYM.not} (obligatory not to). Quantified: "O${qU('x')}A<u>x</u>" (it's obligatory that everyone do A) ≠ "${qE('x')}OA<u>x</u>" (some specific person has the duty).`,
   M:`<b>Imperative arguments:</b> imperatives aren't true or false, so "valid" = the premises conjoined with the conclusion's contradictory are inconsistent; read 1/0 as correct/incorrect. "Au" and "A<u>u</u>" are different wffs. Don't-combine premises "${SYM.not}(A<u>u</u> ${SYM.and} B<u>u</u>)" forbid a pair without saying which part to drop.<br><br><b>Deontic proofs:</b> deontic worlds (D, DD, …) are ideal alternatives. Reverse squiggles: ${SYM.not}O ⇒ R${SYM.not}; ${SYM.not}R ⇒ O${SYM.not}. Drop R into a NEW deontic world (star it); drop O into each deontic world (don't star). Extras: the <b>indicative transfer</b> rule moves indicatives between a deontic world and the world it depends on; <b>Kant's Law</b>: "O A" entails "◊A" (ought implies can).`,
   N:`"u:A" = you accept (believe) A; "x:A" = x believes A. Keep "${SYM.not}u:A" (you don't believe A) distinct from "u:${SYM.not}A" (you believe not-A); "take no position" = (${SYM.not}u:A ${SYM.and} ${SYM.not}u:${SYM.not}A). Underlining BEFORE the ":" makes the formula an imperative ("<u>u</u>:A" = believe A); underlining AFTER the ":" makes it about willing ("u:A<u>u</u>" = you act/are resolved/desire to do A — act if present and yours, resolve if future, desire if another's). Rationality: "O<u>u</u>:A" = A is evident to you (rationally required); "R<u>u</u>:A" = A would be reasonable for you to believe (rationally permissible).`,
-  O:`Belief logic generates consistency norms (an implicit "be consistent" premise is built into the rules). Belief worlds ("u", "uu", …) contain everything you're committed to accepting. <b>B−</b>: from "${SYM.not}u:A" derive "u ${SYM.therefore} ${SYM.not}A" using a NEW string of u's (star the original). <b>B+</b>: from "u:A" derive "u ${SYM.therefore} A" using any string of u's (don't star). Use B− first, B+ later. Note what fails: not-believing isn't believing-not, and believing doesn't make true.`,
-  P:`Probability = favorable ÷ total equally likely cases (52 cards, 36 dice combinations, 2ⁿ coin patterns). Necessary truth = 100%; self-contradiction = 0%; P(not A)=1−P(A). Independent: P(A and B)=P(A)·P(B); dependent: multiply by P(B after A). Mutually exclusive: P(A or B)=P(A)+P(B); overlapping: subtract the overlap. Conditional: P(B|A)=P(A and B)/P(A).<br><br><b>Odds</b>: against = unfavorable/favorable ("12 to 1 against"); in favor = favorable/unfavorable; x-to-y in favor → P = x/(x+y). <b>Expected gain</b> = P(win)·payoff − P(lose)·stake; compare options by expected cost. <b>Induction</b>: statistical syllogism (N% of A's are B's; X is an A; that's all we know ∴ N% probable), sample projection, analogy — plus Mill's methods (agreement, difference, disagreement, variation) for causes.`,
+  O:`Belief logic generates consistency norms (an implicit "be consistent" premise is built into the rules). Belief worlds ("u", "uu", …) contain everything you're committed to accepting. <b>B−</b>: from "${SYM.not}u:A" derive "u ${SYM.therefore} ${SYM.not}A" using a NEW string of u's (star the original). <b>B+</b>: from "u:A" derive "u ${SYM.therefore} A" using any string of u's (don't star). Use B− first, B+ later. Note what fails: not-believing isn't believing-not, and believing doesn't make true. <b>Modes</b> (as in the original LogiCola): <b>Believing</b> — belief formulas "u:A"; B+ and B− apply only when the u is underlined. <b>Willing</b> — imperatives with underlined letters after the colon ("u:A<u>u</u>" = you will that you do A). <b>Rationality</b> — O (ought / evident) and R (all right / reasonable) on beliefs, with deontic and belief worlds combined (D, Du, DDu). <b>Mixed</b> — all three.`,
+  P:`Set P follows the “Inductive Reasoning” chapter. <b>Percent</b>: probability = (favorable cases × 100) / total equally likely cases (52 cards, 36 dice combinations, 8 patterns for three coins); type a whole number, dropping fractions (one off either way is fine). <b>Odds</b>: first say whether they're in your favor (more favorable cases), even, or against you; then type them, larger number first — in your favor = favorable to unfavorable, against = unfavorable to favorable. <b>Complex</b>: not-A = 100 − A; necessary truth = 100; self-contradiction = 0; both A and B = A × (B given A), or A × B if independent; either A or B = A + B − both, or A + B if they can't both happen; if the problem doesn't say how A affects B, the answer is “unknown”. Odds x to y in favor → probability x/(x+y). <b>Gamble</b>: expected gain = (money you'd win × chances to win − money you'd lose × chances to lose) / total chances. <b>Decide</b>: work out each option's expected value and pick the better one.<br><br><b>Induction</b> and <b>Mill</b>: name the kind of reasoning, then say whether it's in correct form. Statistical: N% of A's are B's; x is an A; this is all we know ∴ it's N% probable that x is B. Sample projection: N% of examined A's are B's; a large and varied group has been examined ∴ probably roughly N% of all A's are B's. Analogy: most things true of x are true of y; x is A; this is all we know ∴ probably y is A. Agreement, difference, disagreement, variation: see the forms shown after each answer — a correct causal conclusion says “probably” and leaves room for the other explanations.<br><br>Our additions: Cards, Dice and Coins (with pictures) and Rules (not / and / or / given / necessary, odds → probability).`,
   Q:`Gensler's five rules for a good lexical definition. A definition should be neither <b>too broad</b> (fits non-instances) nor <b>too narrow</b> (leaves out real ones) — or <b>both</b> at once; should avoid being <b>circular</b> (defines the term with itself) or using <b>poorly understood terms</b>; should <b>match the term in vagueness</b> (not be overly precise); should <b>match its emotional tone</b> (no added positive/negative slant); and should include only <b>essential properties</b> (no accidental features). Use the interchange test: swap the term and its definition in sentences and see if the meaning stays the same.`,
   R:`Eighteen informal fallacies in four groups. <b>Defects of a good argument:</b> circular (question begging) · ambiguous · appeal to emotion · beside the point · straw man. <b>Premise-conclusion patterns:</b> appeal to the crowd · appeal to ignorance · part-whole · genetic · opposition · post hoc ergo propter hoc. <b>Correct-or-faulty forms</b> (fine when their conditions are met, fallacious otherwise): appeal to authority · ad hominem · pro-con. <b>Others:</b> appeal to force · black and white thinking · complex question · false stereotype.<br><br>As in Gensler’s LogiCola, <b>every problem shows the full list of names</b> in two columns. Click a name to open its brief description and a short example (just under the question), then Confirm.`,
   S:`<b>∈</b> membership ("is one of") vs <b>⊆</b> subset ("every member of … is a member of …") — never confuse them: 1 ∈ {1,2} but {1} ⊆ {1,2}. <b>∅</b> is the empty set; ∅ ⊆ A for every A, and {∅} ≠ ∅. A set is fixed by its members alone (<b>extensionality</b>): order and repetition don't matter. Operations: A ∪ B (in either), A ∩ B (in both), A − B (in A but not B), A′ (in the universe U but not A). <b>P(A)</b> = the set of all subsets of A; |P(A)| = 2<sup>|A|</sup>. Ordered pairs (a,b) care about order; A × B = all pairs with first member from A, second from B. When typing a set, use braces and commas — {1, 3} — and ∅ or {} for the empty set; member order doesn't matter.`,

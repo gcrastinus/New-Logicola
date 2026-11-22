@@ -2710,16 +2710,44 @@ function derivePools(model){
   (P.other||[]).forEach(f=>take(f,false));
   return (_derivePoolCache[model]=buckets);
 }
-function nextDeriveSlot(){
-  if(!session.derivePlan) session.derivePlan={plan:[], used:{}};
-  const rec=session.derivePlan;
-  if(!rec.plan.length){
-    const types=['all','no','some','somenot'];
-    types.sort((a,b)=>(rec.used[a]||0)-(rec.used[b]||0) || Math.random()-0.5);
-    rec.plan=shuffle(['none','none','none','none','all','no','some','somenot','sing', types[0]]);
+const DERIVE_KINDS=['none','all','no','some','somenot','sing'];
+function refillDerivePlan(rec){
+  const types=['all','no','some','somenot'];
+  types.sort((a,b)=>(rec.used[a]||0)-(rec.used[b]||0) || Math.random()-0.5);
+  rec.plan=shuffle(['none','none','none','none','all','no','some','somenot','sing', types[0]]);
+}
+// After a miss: 1–2 other questions, then the same kind (fresh letters),
+// repeating that spacing until that kind is right twice in a row.
+function deriveReviewNote(kind, result){
+  if(!kind) return;
+  if(!session.derivePlan) session.derivePlan={plan:[], used:{}, reviews:{}};
+  const rec=session.derivePlan; rec.reviews=rec.reviews||{};
+  if(result==='miss' || result==='recovered'){
+    rec.reviews[kind]={streak:0, wait:1+rand(2)};
+  } else if(result==='right' && rec.reviews[kind]){
+    rec.reviews[kind].streak++;
+    if(rec.reviews[kind].streak>=2) delete rec.reviews[kind];
+    else rec.reviews[kind].wait=1+rand(2);
   }
-  const k=rec.plan.shift();
+}
+function nextDeriveSlot(){
+  if(!session.derivePlan) session.derivePlan={plan:[], used:{}, reviews:{}};
+  const rec=session.derivePlan; rec.reviews=rec.reviews||{}; rec.seen=rec.seen||new Set();
+  const due=Object.keys(rec.reviews).filter(k=>rec.reviews[k].wait<=0);
+  let k;
+  if(due.length){
+    k=due[0];
+  } else {
+    const blocked=new Set(Object.keys(rec.reviews));
+    if(!rec.plan.length) refillDerivePlan(rec);
+    let i=rec.plan.findIndex(x=>!blocked.has(x));
+    if(i<0){ refillDerivePlan(rec); i=rec.plan.findIndex(x=>!blocked.has(x)); }
+    if(i>=0) k=rec.plan.splice(i,1)[0];
+    else k=pick(DERIVE_KINDS.filter(x=>!blocked.has(x)).concat(['none']));
+    Object.keys(rec.reviews).forEach(kind=>{ if(rec.reviews[kind].wait>0) rec.reviews[kind].wait--; });
+  }
   rec.used[k]=(rec.used[k]||0)+1;
+  rec.last=k;
   return k;
 }
 function bDerive(){
@@ -2743,11 +2771,15 @@ function bDerive(){
     strong=strongestConclusions(allCands);
   };
   const typeOf=()=> !strong.length ? 'none' : (/[a-z]/.test(strong[0].a)||/[a-z]/.test(strong[0].b) ? 'sing' : strong[0].t);
+  if(session.derivePlan && !session.derivePlan.seen) session.derivePlan.seen=new Set();
+  const seen=session.derivePlan && session.derivePlan.seen;
+  const premKey=()=>s? s.prem.map(st=>catStr(st)).slice().sort().join(' | ') : '';
+  const usedAlready=()=>!!(seen && premKey() && seen.has(premKey()));
   do{
     tries++;
     if(wantSing){
       trySing();
-      if(typeOf()===slot || (slot==='sing' && typeOf()==='sing') || (slot==='none' && !strong.length)) break;
+      if(!usedAlready() && (typeOf()===slot || (slot==='sing' && typeOf()==='sing') || (slot==='none' && !strong.length))) break;
     }
     if(slot==='none'){
       const pool=(P.noneNear.length && Math.random()<0.85)?P.noneNear:(P.noneOther.length?P.noneOther:P.noneNear);
@@ -2757,11 +2789,12 @@ function bDerive(){
     } else if(P[slot] && P[slot].length){
       fromPrem(pick(P[slot]));
     }
-  } while(tries<80 && typeOf()!==slot && !(slot==='sing' && typeOf()==='sing'));
+  } while(tries<80 && (usedAlready() || (typeOf()!==slot && !(slot==='sing' && typeOf()==='sing'))));
   if(!s){ const fb=(P.all&&P.all[0])||(P.noneNear&&P.noneNear[0]); if(fb) fromPrem(fb); }
+  if(seen && premKey()) seen.add(premKey());
   const NONE_RX=/^(none|nothing|no conclusion( validly)?( follows)?|nothing( validly)? follows)$/;
   const answer = strong.length ? catStr(strong[0]) : 'none';
-  return { setLine:`Set B — Deriving Conclusions (${modelLabel(model)})`, scratch:true, noKeyboard:true,
+  return { deriveSlot:slot, setLine:`Set B — Deriving Conclusions (${modelLabel(model)})`, scratch:true, noKeyboard:true,
     prompt:`State the conclusion that validly follows from these premises (using both premises) — or answer <b>none</b> if nothing follows.<br><br><span class="wff argblock">${catStr(s.prem[0])}<br>${catStr(s.prem[1])}<br>${SYM.therefore} ?</span>`,
     instr:`Type the conclusion the way the premises are written — e.g. “no A is C,” “some A is not C,” or “a is C” — or type “none.” A valid conclusion uses the two letters that occur only once in the premises. If a universal (“all” or “no”) follows, give that (the strongest), not the weaker “some.” On the ${modelLabel(model)} model${model==='traditional'?', a universal pair also yields a "some" conclusion, since the terms are assumed non-empty; the stronger one is the answer':''}. If the star rules are broken, nothing follows.`,
     answer,
@@ -10526,6 +10559,7 @@ function enterGoesToNextProblem(e){
    after the other one was already marked wrong — only one choice was left). */
 function awardCorrect(explainHtml, praise, opts){
   const noPts=!!(opts&&opts.noPoints);
+  if(session.current&&session.current.deriveSlot) deriveReviewNote(session.current.deriveSlot, session.tries>0?'recovered':'right');
   tlog('c',{a:session.lastAnswer,n:session.tries||0}); session.lastAnswer=undefined;
   beep('good');
   const fb=$('fb'); if(!fb) return;
@@ -10542,6 +10576,7 @@ function penalizeWrong(hintHtml, revealHtml){
   tlog('w',{a:session.lastAnswer}); session.lastAnswer=undefined;
   beep('bad');
   session.tries++;
+  if(session.tries>=2 && session.current&&session.current.deriveSlot) deriveReviewNote(session.current.deriveSlot, 'miss');
   if(state.level>0) session.points=Math.max(0,session.points-pointsForWrong());
   updateScoreBar();
   const fb=$('fb'); if(!fb) return session.tries;

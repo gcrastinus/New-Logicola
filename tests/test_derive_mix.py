@@ -5,6 +5,10 @@ run), balances conclusion types, includes singular-term items, shuffles
 letters, covers the valid moods, and — on the traditional model — still
 asks for the strongest (universal) conclusion when one follows.
 
+After a miss, the generator inserts 1–2 other questions and then brings
+back the same kind with new letters, repeating that spacing until the
+kind is answered right twice in a row.
+
 Run a local server, then: python3 tests/test_derive_mix.py [base]
 """
 import collections, re, sys
@@ -112,6 +116,67 @@ with sync_playwright() as pw:
         if model=='traditional':
             check('traditional: Barbara (AAA-1) is asked, with an "all" conclusion', mfs.get('AAA-1',0) > 0, dict(mfs))
             check('traditional: Darapti/Felapton-style strengthened moods appear', any(k in mfs for k in ('AAI-3','EAO-3','EAO-4')), sorted(mfs))
+
+    # ---------------- review after a miss ----------------
+    # After a miss: 1–2 other questions, then the same kind with new letters,
+    # until that kind is right twice in a row.
+    rv=pg.evaluate("""()=>{
+      const run=(kind)=>{
+        session.derivePlan=null; session.syllPlan=null; state.bImport='modern';
+        deriveReviewNote(kind,'miss');
+        const wait=session.derivePlan.reviews[kind].wait;
+        const fillers=[];
+        for(let i=0;i<wait;i++) fillers.push(bDerive().deriveSlot);
+        const back=bDerive();
+        deriveReviewNote(kind,'right');
+        const wait2=session.derivePlan.reviews[kind].wait;
+        const fillers2=[];
+        for(let i=0;i<wait2;i++) fillers2.push(bDerive().deriveSlot);
+        const back2=bDerive();
+        const key1=(back.prompt.match(/argblock">([\\s\\S]*?)<\\/span>/)||[])[1];
+        const key2=(back2.prompt.match(/argblock">([\\s\\S]*?)<\\/span>/)||[])[1];
+        deriveReviewNote(kind,'right');
+        const cleared=!session.derivePlan.reviews[kind];
+        // a later miss restarts the spacing
+        deriveReviewNote(kind,'miss');
+        const wait3=session.derivePlan.reviews[kind].wait;
+        const fillers3=[];
+        for(let i=0;i<wait3;i++) fillers3.push(bDerive().deriveSlot);
+        const back3=bDerive();
+        return {wait,fillers,back:back.deriveSlot,wait2,fillers2,back2:back2.deriveSlot,
+                cleared,fresh:key1!==key2,wait3,fillers3,back3:back3.deriveSlot};
+      };
+      const trials=[];
+      for(let i=0;i<12;i++) trials.push(run('all'));
+      for(let i=0;i<6;i++) trials.push(run('somenot'));
+      return trials;
+    }""")
+    alls, soms=rv[:12], rv[12:]
+    def review_ok(rows, kind):
+        waits_ok=all(r['wait'] in (1,2) and r['wait2'] in (1,2) and r['wait3'] in (1,2) for r in rows)
+        fillers_ok=all(kind not in r['fillers'] and kind not in r['fillers2'] and kind not in r['fillers3'] for r in rows)
+        back_ok=all(r['back']==kind and r['back2']==kind and r['back3']==kind for r in rows)
+        return waits_ok, fillers_ok, back_ok, all(r['cleared'] for r in rows), all(r['fresh'] for r in rows)
+    w,f,b,c,fr=review_ok(alls,'all')
+    check('after missing "all": wait is 1 or 2 other questions', w)
+    check('those other questions are not another "all"', f, [r['fillers'] for r in alls][:3])
+    check('then the same kind "all" comes back', b)
+    check('two rights in a row clear the "all" review', c)
+    check('the returned "all" items have fresh premises, not the same letters', fr)
+    w,f,b,c,fr=review_ok(soms,'somenot')
+    check('the same 1–2-then-back spacing works for "some-not"', w and f and b and c)
+
+    # recovered after a first-try miss on the same item restarts the review (not a clean right)
+    recov=pg.evaluate("""()=>{
+      session.derivePlan=null; session.syllPlan=null;
+      deriveReviewNote('no','miss');
+      const wait=session.derivePlan.reviews.no.wait;
+      for(let i=0;i<wait;i++) bDerive();
+      const back=bDerive();
+      deriveReviewNote('no','recovered');
+      return {still:!!session.derivePlan.reviews.no, streak:session.derivePlan.reviews.no&&session.derivePlan.reviews.no.streak, wait:session.derivePlan.reviews.no&&session.derivePlan.reviews.no.wait, slot:back.deriveSlot};
+    }""")
+    check('a right answer after a wrong try on the same item does not count toward the two-in-a-row', recov['still'] and recov['streak']==0 and recov['wait'] in (1,2), recov)
 
     check('no page errors', not errs, errs)
     br.close()

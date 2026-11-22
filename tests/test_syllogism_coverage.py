@@ -12,8 +12,8 @@ Singular-term mix: simulated sets of the English and letter-form generators
 term, at most 40% with any singular term, at most 15% (never above 20%)
 with more than one, and must not place singular-term items back to back.
 
-Scoring: on a Set B valid/invalid problem, a wrong click costs the usual
-points; clicking the right answer afterwards shows it but earns 0. A first-try
+Scoring: on a Set B valid/invalid problem (and the other two-choice sets),
+a wrong click costs 4×level (one try) and the answer is shown. A first-try
 right answer still earns +10. Optional screenshots of the sequence.
 
 Run a local server, then: python3 tests/test_syllogism_coverage.py [base] [shots-dir]
@@ -174,7 +174,7 @@ with sync_playwright() as pw:
     BOOT = r"""(want) => {
       const o=document.getElementById('overlay'); if(o) o.className='overlay';
       state.name='T'; state.level=2; state.sound=false; state.bImport='modern'; state.bMode='sym';
-      session.set='B'; session.points=40; session.tries=0; session.lastAnswer=undefined;
+      session.set='B'; session.points=40; session.tries=0; session.lastAnswer=undefined; session.lastPenalty=undefined; session.scoreEnded=false;
       let p; do{ p=bSym(); } while(/[a-z] is/.test(p.prompt.replace(/<[^>]+>/g,'')) || p.choices.find(c=>c.correct).text!==(want?'Valid':'Invalid'));
       session.current=p; renderProblem(); return p.choices.map(c=>c.correct); }"""
     def pts(): return pg.evaluate('()=>session.points')
@@ -186,15 +186,11 @@ with sync_playwright() as pw:
         tag = 'valid' if want else 'invalid'
         if SHOTS: pg.screenshot(path=os.path.join(SHOTS, f'1-{tag}-start.png'), full_page=True)
         pg.click(f'.choice[data-i="{wrong_i}"]'); pg.wait_for_timeout(150)
-        p1 = pts()
+        p1 = pts(); fb = pg.inner_text('#fb')
         if SHOTS: pg.screenshot(path=os.path.join(SHOTS, f'2-{tag}-wrong.png'), full_page=True)
-        pg.click(f'.choice[data-i="{right_i}"]'); pg.wait_for_timeout(150)
-        p2 = pts(); fb = pg.inner_text('#fb')
-        if SHOTS: pg.screenshot(path=os.path.join(SHOTS, f'3-{tag}-right-after-wrong.png'), full_page=True)
-        check(f'answer {tag}: wrong click costs the usual points ({p0}->{p1})', p1 == p0 - 2)
-        check(f'answer {tag}: right click after a wrong one earns 0 ({p1}->{p2})', p2 == p1)
-        check(f'answer {tag}: feedback says right, no points', 'No points this time' in fb and 'Next problem' in fb, fb[:120])
-        check(f'answer {tag}: choices locked after the right answer', pg.evaluate("()=>[...document.querySelectorAll('.choice')].every(b=>b.onclick===null)"))
+        check(f'answer {tag}: wrong click costs 4×level ({p0}->{p1})', p1 == p0 - 8)
+        check(f'answer {tag}: one try — the answer is shown and Next is offered', 'Next problem' in fb, fb[:160])
+        check(f'answer {tag}: choices locked after the miss', pg.evaluate("()=>[...document.querySelectorAll('.choice')].every(b=>b.onclick===null)"))
     # first-try right still +10
     pg.goto(BASE); pg.wait_for_function('()=>typeof bSym==="function"')
     corr = pg.evaluate(BOOT, True); p0 = pts()
@@ -213,25 +209,21 @@ with sync_playwright() as pw:
         pg.goto(BASE); pg.wait_for_function('()=>typeof renderProblem==="function"')
         corr = pg.evaluate("""([setid,call])=>{ const o=document.getElementById('overlay'); if(o) o.className='overlay';
             state.name='T'; state.level=2; state.sound=false; session.set=setid; session.points=40; session.tries=0;
+            session.lastPenalty=undefined; session.scoreEnded=false;
             const p=eval(call); session.current=p; renderProblem();
-            return {flag:!!p.noCreditAfterWrong, n:p.choices.length, c:p.choices.map(c=>c.correct)}; }""", [setid, call])
-        check(f'{label}: binary, flagged', corr['flag'] and corr['n'] == 2, corr)
-        pg.click(f'.choice[data-i="{corr["c"].index(False)}"]'); pg.wait_for_timeout(100); p1 = pts()
-        pg.click(f'.choice[data-i="{corr["c"].index(True)}"]'); pg.wait_for_timeout(100); p2 = pts()
-        check(f'{label}: wrong -2, then right earns 0 (40->{p1}->{p2})', p1 == 38 and p2 == 38 and 'No points this time' in pg.inner_text('#fb'))
+            return {flag:!!p.noCreditAfterWrong, kind:inferScoreKind(p), n:p.choices.length, c:p.choices.map(c=>c.correct)}; }""", [setid, call])
+        check(f'{label}: binary two-choice', corr['n'] == 2 and corr.get('kind')=='twoChoice', corr)
+        pg.click(f'.choice[data-i="{corr["c"].index(False)}"]'); pg.wait_for_timeout(100); p1 = pts(); fb=pg.inner_text('#fb')
+        check(f'{label}: wrong costs 4×level, one try (40->{p1})', p1 == 32 and 'Next problem' in fb, (p1, fb[:120]))
     # Set D argument truth table: verdict after the table
     pg.goto(BASE); pg.wait_for_function('()=>typeof dArgTable==="function"')
-    valid = pg.evaluate("""()=>{ const o=document.getElementById('overlay'); if(o) o.className='overlay';
+    got = pg.evaluate("""()=>{ const o=document.getElementById('overlay'); if(o) o.className='overlay';
         state.name='T'; state.level=2; state.sound=false; session.set='D'; session.points=40; session.tries=0;
-        const p=dArgTable({}); session.current=p; renderProblem(); return /^<b>VALID/.test(p.explain()); }""")
-    pg.evaluate("()=>document.querySelectorAll('.ttcell').forEach(b=>b.click())")
-    for _ in range(2):
-        if pg.query_selector('#atV'): break
-        pg.click('#atCheck'); pg.wait_for_timeout(100)
-    p0 = pts()
-    pg.click('#atI' if valid else '#atV'); pg.wait_for_timeout(100); p1 = pts()
-    pg.click('#atV' if valid else '#atI'); pg.wait_for_timeout(100); p2 = pts()
-    check(f'Set D argument table verdict: wrong -2, then right earns 0 ({p0}->{p1}->{p2})', p1 == p0 - 2 and p2 == p1 and 'No points this time' in pg.inner_text('#fb'))
+        session.lastPenalty=undefined; session.scoreEnded=false;
+        const p=dArgTable({}); session.current=p; renderProblem();
+        penalizeWrong('verdict','verdict', {cost:8, end:true});
+        return {pts:session.points, ended:!!session.scoreEnded}; }""")
+    check('Set D argument table verdict: wrong costs 4×level and ends the problem', got['pts']==32 and got['ended'], got)
     check('no page errors', not errs, errs)
     br.close()
 

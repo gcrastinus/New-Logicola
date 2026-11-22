@@ -1348,7 +1348,7 @@ $('printBtn').onclick = () => window.print();
     <div class="card" id="welcomeCard">
       <div class="setline">Welcome</div>
       <div class="prompt">A logic tutor that generates problems, checks your answers, and tracks your progress.</div>
-      <div class="instr">Pick <b>Exercise Sets</b> to begin. Earn <b>100 points</b> to complete a set. Right answers add points; wrong answers cost points (more at higher scoring levels). It's "no-fault": only completions are recorded, and you keep the highest level you reach.</div>
+      <div class="instr">Pick <b>Exercise Sets</b> to begin. Earn <b>100 points</b> to complete a set. A right answer adds points (the amount depends on the exercise); a wrong answer costs points (more at higher scoring levels). The score can drop below 0 during a problem, then returns to 0 when that problem ends. It's "no-fault": only completions are recorded, and you keep the highest level you reach.</div>
       <div class="rowbtns"><button class="primary" id="startBtn">Choose an exercise</button>
         <button class="ghost" id="optBtn">Options</button></div>
       <p class="designer-credit">Designed and directed by Timothy Kearns, Ph.D. AI tools were used for drafting some of the study sections and for building the interactive exercises and answer keys.</p>
@@ -2563,8 +2563,9 @@ function starredLines(s){ return `${starMarkup(s.prem[0],false)}<br>${starMarkup
 function lc(s){ return s.charAt(0).toLowerCase()+s.slice(1); }
 
 /* ---- B: singular-term quota -----------------------------------------------
-   A scored set is 100 points, 10 a right answer, so a clean run is 10
-   problems. Each activity keeps a running count and fills decades of 10:
+   A scored set ends at 100 points; how many problems that takes depends
+   on the exercise and the scoring level. Each activity keeps a running
+   count and fills decades of 10:
      at least 6 with no singular term (60%),
      at most 4 with any singular term (40%),
      at most 1 with more than one singular term (10%, under the 15% cap;
@@ -3004,13 +3005,16 @@ function mountVenn(root,s,target,p,opts){
       const okS=setEq(userShaded,new Set(target.shaded)), okX=xsOk();
       const diagOk=okS&&okX, ansOk=ans===s.valid;
       if(diagOk&&ansOk){ judged=true; awardCorrect(`Diagram ✔ &nbsp; Verdict ✔<br>${p.explain()}`, null, {noPoints:verdictMissed}); return; }
-      if(!ansOk) verdictMissed=true;
       const parts=[];
       parts.push(diagOk?'Diagram ✔.':(!okS&&!okX?'Diagram ✗ — check both the shading and the ✕.'
         :(!okS?'Diagram ✗ — the shading (for "no"/"all") is off.':'Diagram ✗ — the ✕ (for "some") is misplaced.')));
       parts.push(ansOk?'Verdict ✔.':`Verdict ✗${trad?' (remember: every term is assumed non-empty)':''}.`);
-      const t=penalizeWrong(parts.join(' '), `${parts.join(' ')}<br>${p.explain()}`);
-      if(t>=2) drawSolution();
+      if(!ansOk){ verdictMissed=true; judged=true;
+        penalizeWrong(parts.join(' '), `${parts.join(' ')}<br>${p.explain()}`, {cost:scoringOn()?4*state.level:0, end:true});
+        drawSolution();
+        return;
+      }
+      penalizeWrong(parts.join(' '), `${parts.join(' ')}<br>${p.explain()}`, {end:false});
     };
     root.querySelector('#vv').onclick=()=>judgeHard(true);
     root.querySelector('#vi').onclick=()=>judgeHard(false);
@@ -3028,22 +3032,21 @@ function mountVenn(root,s,target,p,opts){
       root.querySelector('#vv').onclick=()=>judge(true);
       root.querySelector('#vi').onclick=()=>judge(false);
     } else {
-      tlog('w');
-      if(state.level>0) session.points=Math.max(0,session.points-pointsForWrong());
-      updateScoreBar();
-      const fb=$('fb'); fb.className='feedback no show';
       let hint = (!okS&&!okX)?'Check both your shading (for the "no"/"all" premise) and your ✕ (for the "some" premise).'
                : (!okS)?'Shade the areas the universal ("no"/"all") premise rules out as empty.'
                : 'Re-check the ✕: it goes in the one remaining un-shaded area the "some" premise requires.';
-      fb.innerHTML=`❌ Diagram not right yet.${state.level>0?` (−${pointsForWrong()})`:''} ${hint}`;
+      penalizeWrong('Diagram not right yet. '+hint, p.explain(), {end:false});
     }
   };
   function judge(ans){
-    if(judged) return; judged=true;
-    if(ans===s.valid){ awardCorrect(p.explain(), null, {noPoints:session.tries>0}); }
-    else { judged=false; penalizeWrong(trad
+    if(judged) return;
+    if(ans===s.valid){ judged=true; awardCorrect(p.explain(), null, {noPoints:!!p._verdictMissed}); }
+    else { p._verdictMissed=true;
+      penalizeWrong(trad
       ? `Look again — with every term assumed non-empty, does the completed diagram guarantee "${engStmt(s.concl,s.map)}"?`
-      : `Look again — is the conclusion "${engStmt(s.concl,s.map)}" automatically drawn once the premises are on the diagram?`, p.explain()); }
+      : `Look again — is the conclusion "${engStmt(s.concl,s.map)}" automatically drawn once the premises are on the diagram?`, p.explain(), {cost:scoringOn()?4*state.level:0, end:true});
+      judged=true;
+    }
   }
 }
 function bVenn(){
@@ -3193,8 +3196,7 @@ function dTable(opts){
       if(cells.some(c=>c===null)){ const fb=$('fb'); fb.className='feedback info show'; fb.innerHTML='Fill in every row first (the "–" cells toggle 1/0).'; return; }
       const wrong=cells.reduce((k,c,i)=>k+(c!==truth[i]?1:0),0);
       if(wrong===0){ awardCorrect(''); root.querySelectorAll('.ttcell').forEach(b=>b.disabled=true); }
-      else{ const t2=penalizeWrong(`${wrong} row${wrong>1?'s are':' is'} wrong. For each row, substitute that row's values and simplify from the inside out.`, p.explain());
-        if(t2>=2){ root.querySelectorAll('.ttcell').forEach((b,i)=>{ b.textContent=truth[i]?'1':'0'; b.disabled=true; }); } }
+      else{ penalizeWrong(`${wrong} row${wrong>1?'s are':' is'} wrong. For each row, substitute that row's values and simplify from the inside out.`, p.explain(), {end:false}); }
     };
   };
   p.reveal=()=>{ const el=$('customBody'); if(el) el.innerHTML=doneTable(); };
@@ -3240,9 +3242,7 @@ function dArgTable(opts){
       if(cells.some(row=>row.some(c=>c===null))){ const fb=$('fb'); fb.className='feedback info show'; fb.innerHTML='Fill in every premise and conclusion cell first (the "–" cells toggle 1/0).'; return; }
       let wrong=0; cells.forEach((row,i)=>row.forEach((c,j)=>{ if(c!==truth[i][j]) wrong++; }));
       if(wrong>0){
-        const t2=penalizeWrong(`${wrong} cell${wrong>1?'s are':' is'} wrong. For each row, substitute that row's letter values into the wff at the top of the column and simplify from the inside out.`, p.explain());
-        if(t2>=2){ root.querySelectorAll('.ttcell').forEach(b=>{ const i=+b.dataset.i,j=+b.dataset.j; b.textContent=truth[i][j]?'1':'0'; b.disabled=true; });
-          root.querySelector('#atCheck').disabled=true; askVerdict(); }
+        penalizeWrong(`${wrong} cell${wrong>1?'s are':' is'} wrong. For each row, substitute that row's letter values into the wff at the top of the column and simplify from the inside out.`, p.explain(), {end:false});
         return;
       }
       root.querySelectorAll('.ttcell').forEach(b=>b.disabled=true);
@@ -3255,7 +3255,7 @@ function dArgTable(opts){
       let verdictMissed=false; // after a wrong Valid/Invalid the other one earns nothing
       const judge=(ans)=>{ if(judged) return;
         if(ans===valid){ judged=true; awardCorrect(p.explain(), null, {noPoints:verdictMissed}); }
-        else{ verdictMissed=true; penalizeWrong('Scan each row: the argument is invalid exactly when some row has every premise 1 and the conclusion 0.', p.explain()); } };
+        else{ verdictMissed=true; judged=true; penalizeWrong('Scan each row: the argument is invalid exactly when some row has every premise 1 and the conclusion 0.', p.explain(), {cost:scoringOn()?4*state.level:0, end:true}); } };
       root.querySelector('#atV').onclick=()=>judge(true);
       root.querySelector('#atI').onclick=()=>judge(false);
     }
@@ -4083,10 +4083,9 @@ function proofPlayer(cfg){
     }
     const finish=()=>{
       const fb=$('fb'); fb.className='feedback ok show';
-      fb.innerHTML=`🏁 <b>Problem complete!</b> The argument is <b>${S.valid?'VALID':'INVALID'}</b>. +5 bonus. <div class="rowbtns"><button class="primary" onclick="nextProblem()">Next problem →</button></div>`;
-      session.points+=5; beep('win'); updateScoreBar();
-      if(session.points>=100) completeSet();
-      else focusNextProblem();
+      fb.innerHTML=`🏁 <b>Problem complete!</b> The argument is <b>${S.valid?'VALID':'INVALID'}</b>.${scoringOn()?' +20 points.':''} <div class="rowbtns"><button class="primary" onclick="nextProblem()">Next problem →</button></div>`;
+      applyDelta(20); beep('win');
+      endProblemScore();
     };
     const advance=()=>{
       const st=S.steps[idx];
@@ -4144,32 +4143,34 @@ function proofPlayer(cfg){
         const ji=root.querySelector('#jInput');
         if(!justOk(ji?ji.value:'',st0)){
           tlog('w'); jtries++;
-          if(state.level>0) session.points=Math.max(0,session.points-pointsForWrong());
-          beep('bad'); updateScoreBar();
+          const justCost=(!scoringOn()||tries>0||jtries>1)?0:2*state.level;
+          applyDelta(-justCost); if(justCost) tries++;
+          beep('bad');
           const fb=$('fb'); fb.className='feedback no show';
-          if(jtries===1){ fb.innerHTML=`❌ <b>That line is right, but the justification isn't.</b>${state.level>0?` (−${pointsForWrong()})`:''} Cite the earlier line numbers it comes from, e.g. "from 1 and 2." For RAA, cite the assumption and the two contradicting lines.`; if(!(cfg.forceType||state.type)) buildControls(); else if(ji) ji.focus(); }
+          if(jtries===1){ fb.innerHTML=`❌ <b>That line is right, but the justification isn't.</b>${justCost?` (−${justCost})`:''} Cite the earlier line numbers it comes from, e.g. "from 1 and 2." For RAA, cite the assumption and the two contradicting lines.`; if(!(cfg.forceType||state.type)) buildControls(); else if(ji) ji.focus(); }
           else { fb.innerHTML=`❌ The justification is: <b>${st0.just}</b> (added for you, no further penalty).`; advance(); }
           return;
         }
       }
       tlog('c');
-      session.points+=3; beep('good'); updateScoreBar();
-      const fb=$('fb'); fb.className='feedback ok show'; fb.innerHTML=`✅ <b>${pick(['Right!','Good!','Yes!','Correct!'])}</b> +3`;
-      if(session.points>=100){ completeSet(); return; }
+      beep('good');
+      const fb=$('fb'); fb.className='feedback ok show'; fb.innerHTML=`✅ <b>${pick(['Right!','Good!','Yes!','Correct!'])}</b>`;
       advance();
     };
     const wrong=(revealTxt)=>{
       tlog('w');
+      const lineCost=(!scoringOn()||tries>0)?0:2*state.level;
       tries++;
-      if(state.level>0) session.points=Math.max(0,session.points-pointsForWrong());
-      beep('bad'); updateScoreBar();
+      applyDelta(-lineCost);
+      beep('bad');
       const fb=$('fb'); fb.className='feedback no show';
-      if(noPlan||!S.steps[idx]) fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${state.level>0?` (−${pointsForWrong()})`:''} That line doesn't follow by the rules from the not-blocked-off lines.`;
+      const shown=scoringOn()&&lineCost?` (−${lineCost})`:'';
+      if(noPlan||!S.steps[idx]) fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${shown} That line doesn't follow by the rules from the not-blocked-off lines.`;
       /* REFUTE is never entered for the student (R1, Nov 2026): recognizing that
          the strategy has run out is part of the exercise, so a wrong answer at
          the REFUTE point gets the hint every time and the problem waits. */
-      else if(S.steps[idx].kind==='refute') fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${state.level>0?` (−${pointsForWrong()})`:''} ${hintForStep(S.steps[idx])}${tries>1?' LogiCola won\'t enter REFUTE for you — type it yourself to finish the problem.':''}`;
-      else if(tries===1) fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${state.level>0?` (−${pointsForWrong()})`:''} ${hintForStep(S.steps[idx])}`;
+      else if(S.steps[idx].kind==='refute') fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${shown} ${hintForStep(S.steps[idx])}${tries>1?' LogiCola won\'t enter REFUTE for you — type it yourself to finish the problem.':''}`;
+      else if(tries===1) fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${shown} ${hintForStep(S.steps[idx])}`;
       else { fb.innerHTML=`❌ The next line is: <b class="wff">${revealTxt}</b> (added for you, no further penalty).`; advance(); }
     };
     const hintForStep=(st)=>{
@@ -4185,7 +4186,7 @@ function proofPlayer(cfg){
     let refHintPaid=false;
     const refuteGetAnswer=(how)=>{
       tlog('h');
-      if(!refHintPaid){ refHintPaid=true; if(state.level>0){ session.points=Math.max(0,session.points-Math.max(1,state.level)); updateScoreBar(); } }
+      if(!refHintPaid){ refHintPaid=true; const c=(!scoringOn()||tries>0)?0:2*state.level; applyDelta(-c); if(c) tries++; }
       const fb=$('fb'); fb.className='feedback info show';
       fb.innerHTML=`💡 Nothing more can be derived and no two not-blocked-off lines contradict, so the answer is <b>REFUTE</b>. ${how} — LogiCola won't enter it for you.`;
     };
@@ -4211,7 +4212,7 @@ function proofPlayer(cfg){
           <input class="ans" id="ansInput" autocomplete="off" autocapitalize="off" spellcheck="false"
             placeholder='${st.kind==='refute'?'type REFUTE':(idx===0?'asm: …':'next line (or ASM: … / REFUTE)')}'>
           <button class="primary" id="prfGo">Enter</button></div>${justHtml(st)}${state.keyboard?keyboardHtml():''}</div>
-          <div class="rowbtns"${noPlan?' hidden':''}><button class="hintbtn" id="prfGet">Get answer (−${Math.max(1,state.level)})</button></div>`;
+          <div class="rowbtns"${noPlan?' hidden':''}><button class="hintbtn" id="prfGet">Get answer (−${(!scoringOn()||tries>0)?0:(2*state.level)})</button></div>`;
         const inp=ctl.querySelector('#ansInput'); inp.focus();
         const matchOne=(st,v)=>{
           let ok=false;
@@ -4232,6 +4233,22 @@ function proofPlayer(cfg){
         };
         const submit=()=>{
           const v=inp.value.trim(); if(!v) return;
+          if(/^refute$/i.test(v) && st.kind!=='refute'){
+            const c=scoringOn()?Math.floor(state.level/2):0; applyDelta(-c);
+            const fb=$('fb'); fb.className='feedback no show';
+            fb.innerHTML=`❌ Type REFUTE only when nothing more follows.${c?` (−${c})`:''}`;
+            return;
+          }
+          if(st.kind==='asm'){
+            const t=parseTyped(v);
+            const wantF=canonP(stepTyped(st));
+            if(!t.asm && (canonP(t.wff)===wantF || canonP(t.body)===wantF)){
+              const c=scoringOn()?Math.floor(state.level/2):0; applyDelta(-c);
+              const fb=$('fb'); fb.className='feedback no show';
+              fb.innerHTML=`❌ Type "ASM:" before the formula.${c?` (−${c})`:''}`;
+              return;
+            }
+          }
           const j=eligibleSteps().find(k=>matchOne(S.steps[k],v));
           if(j!==undefined){ promote(j); right(); return; }
           const res=legalStep(v);
@@ -4241,7 +4258,7 @@ function proofPlayer(cfg){
         ctl.querySelector('#prfGo').onclick=submit;
         inp.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); });
         const jIn=ctl.querySelector('#jInput'); if(jIn) jIn.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); });
-        ctl.querySelector('#prfGet').onclick=()=>{ if(st.kind==='refute'){ refuteGetAnswer('Type REFUTE to finish'); inp.focus(); return; } tlog('h'); if(state.level>0){ session.points=Math.max(0,session.points-Math.max(1,state.level)); updateScoreBar(); } const fb=$('fb'); fb.className='feedback info show'; fb.innerHTML=`💡 Next line: <b class="wff">${stepAnswerText(st)}</b>`; advance(); };
+        ctl.querySelector('#prfGet').onclick=()=>{ if(st.kind==='refute'){ refuteGetAnswer('Type REFUTE to finish'); inp.focus(); return; } tlog('h'); { const c=(!scoringOn()||tries>0)?0:2*state.level; applyDelta(-c); if(c) tries++; } const fb=$('fb'); fb.className='feedback info show'; fb.innerHTML=`💡 Next line: <b class="wff">${stepAnswerText(st)}</b>`; advance(); };
       } else {
         const correct=stepAnswerText(st);
         const elig=eligibleSteps();
@@ -4253,13 +4270,13 @@ function proofPlayer(cfg){
         opts.forEach(o=>{ if(!o.ok){ const r=legalStep(o.t); if(r){ o.ok=true; o.legal=r; } } });
         ctl.innerHTML=`${twHtml}<div class="instr" style="margin-top:8px">What's next${state.name?', '+esc(state.name):''}?</div>
           ${justHtml(st)}<div class="choices">${opts.map((o,i)=>`<button class="choice" data-ok="${o.ok?1:0}" data-i="${i}" data-j="${o.ok&&!o.legal?o.j:''}"><span class="num">${i+1}</span><span class="txt">${o.t}</span></button>`).join('')}</div>
-          <div class="rowbtns"><button class="hintbtn" id="prfGet">Get answer (−${Math.max(1,state.level)})</button></div>`;
+          <div class="rowbtns"><button class="hintbtn" id="prfGet">Get answer (−${(!scoringOn()||tries>0)?0:(2*state.level)})</button></div>`;
         ctl.querySelectorAll('.choice').forEach(b=>b.onclick=()=>{
           const o=opts[+b.dataset.i];
           if(b.dataset.ok==='1'){ b.classList.add('good'); if(o&&o.legal) acceptLegal(o.legal); else { promote(+b.dataset.j); right(); } }
           else{ b.classList.add('bad'); wrong(correct); }
         });
-        ctl.querySelector('#prfGet').onclick=()=>{ if(st.kind==='refute'){ refuteGetAnswer('Choose REFUTE to finish'); return; } tlog('h'); if(state.level>0){ session.points=Math.max(0,session.points-Math.max(1,state.level)); updateScoreBar(); } advance(); };
+        ctl.querySelector('#prfGet').onclick=()=>{ if(st.kind==='refute'){ refuteGetAnswer('Choose REFUTE to finish'); return; } tlog('h'); { const c=(!scoringOn()||tries>0)?0:2*state.level; applyDelta(-c); if(c) tries++; } advance(); };
         const keyH=e=>{ if(/^[1-4]$/.test(e.key)){ const bs=ctl.querySelectorAll('.choice'); const i=+e.key-1; if(bs[i]) bs[i].click(); } };
         ctl.addEventListener('keydown',keyH);
       }
@@ -4268,6 +4285,7 @@ function proofPlayer(cfg){
     draw();
   };
   p.reveal=()=>{};
+  p.scoreKind='proof';
   return p;
 }
 /* ---- Set G: regular proofs (Valid / Invalid / Combined, per LogiCola) ---- */
@@ -4424,7 +4442,8 @@ function mountCopi(root, premAsts, conclAst, opts){
     rulesEl.querySelectorAll('.copirule').forEach(b=>b.onclick=()=>{ if(done) return; rule=(rule===b.dataset.r?null:b.dataset.r); renderRules(); updateSel(); });
   }
   function updateSel(){ selEl.textContent=`Rule: ${rule||'—'}   Lines: ${[...sel].sort((a,b)=>a-b).join(', ')||'—'}`; }
-  function deduct(){ if(opts.scored && state.level>0){ session.points=Math.max(0,session.points-pointsForWrong()); updateScoreBar(); } }
+  let copiRejected=false;
+  function deduct(){ if(!opts.scored||!scoringOn()) return 0; const c=copiRejected?0:2*state.level; applyDelta(-c); if(c) copiRejected=true; return c; }
   function step(msg,cls){ fb.className='feedback '+(cls||'no')+' show'; fb.innerHTML=msg; }
   function add(){
     if(done) return;
@@ -4439,11 +4458,10 @@ function mountCopi(root, premAsts, conclAst, opts){
       lines.push({f:ast,n,just:`{${[...sel].sort((a,b)=>a-b).join(', ')} ${rule}}`});
       inp.value=''; sel=new Set(); rule=null; renderLines(); renderRules(); updateSel();
       if(astEq(ast,conclAst)){ complete(); }
-      else step('✓ Line added.','ok');
+      else { copiRejected=false; step('✓ Line added.','ok'); }
     } else {
       if(opts.scored) tlog('w');
-      deduct();
-      step(`That step doesn’t follow by <b>${rule}</b> (${COPI_NAME[rule]}) from line ${[...sel].sort((a,b)=>a-b).join(', ')}.${opts.scored&&state.level>0?` (−${pointsForWrong()})`:''} Check the rule and the cited lines, then try again.`,'no');
+      const copiCost=deduct(); step(`That step doesn’t follow by <b>${rule}</b> (${COPI_NAME[rule]}) from line ${[...sel].sort((a,b)=>a-b).join(', ')}.${copiCost?` (−${copiCost})`:''} Check the rule and the cited lines, then try again.`,'no');
     }
   }
   function complete(){
@@ -4455,9 +4473,10 @@ function mountCopi(root, premAsts, conclAst, opts){
   $$('#copiAdd').onclick=add;
   inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); add(); } });
   $$('#copiQuit').onclick=()=>{
-    if(opts.scored){ tlog('q'); deduct(); done=true; fb.className='feedback no show';
-      fb.innerHTML=`You quit this proof.${state.level>0?` (−${pointsForWrong()})`:''} ${opts.sample?`One proof:<br><span class="wff" style="display:block;line-height:1.8">${opts.sample}</span>`:''}
+    if(opts.scored){ tlog('q'); const c=deduct(); done=true; fb.className='feedback no show';
+      fb.innerHTML=`You quit this proof.${c?` (−${c})`:''} ${opts.sample?`One proof:<br><span class="wff" style="display:block;line-height:1.8">${opts.sample}</span>`:''}
         <div class="rowbtns"><button class="primary" onclick="nextProblem()">Next problem →</button></div>`;
+      endProblemScore();
     } else { mountCopi(root, premAsts, conclAst, opts); }
   };
   if(opts.onBack){ const bb=$$('#copiBack'); if(bb) bb.onclick=(typeof opts.onBack==='function'?opts.onBack:()=>nextProblem()); }
@@ -4515,7 +4534,7 @@ function gCopi(level){
   const s=pick(pool)(A,B,C);
   const prem=s.prem.map(parseProp), concl=parseProp(s.concl);
   const sample=s.steps.map((st,i)=>`${s.prem.length+i+1}. ${st.w}  <span class="muted">{${st.from.join(', ')} ${st.rule}}</span>`).join('<br>');
-  const p={ setLine:`Set G — Copi Proofs (${level})`, mode:'custom',
+  const p={ setLine:`Set G — Copi Proofs (${level})`, mode:'custom', scoreKind:'proof',
     prompt:`Prove the conclusion, Copi style: type the next wff, pick a rule, then click the earlier line numbers it follows from. Keep going until you reach the conclusion.`,
     instr:`Inference rules (whole lines): MP, MT, HS, DS, CD, Simp, Conj, Add. Replacement rules (rewrite a wff or a part of it): DeM, Comm, Assoc, Dist, DN, Trans, Impl, Equiv, Exp, Taut. There is no “get answer” — but you can Quit (costs points), or open the Proof checker to try your own argument.`,
     explain:()=>`Proved. One way to do it:<br><span class="wff" style="display:block;line-height:1.8">${sample}</span>` };
@@ -4590,7 +4609,7 @@ function gTree(level){
       return `<div class="tnode">${lines}<div><button class="branchbtn" data-leaf="${id}" data-closed="${n.closed?1:0}">open</button></div></div>`; }
     return `<div class="tnode">${lines}<div class="tkids">${n.kids.map(renderNode).join('')}</div></div>`;
   };
-  const p={ setLine:`Set G — Truth Trees (${lvlLabel}${autoClose?' · auto-close':''}${autoDN?' · auto-DN':''})`,
+  const p={ setLine:`Set G — Truth Trees (${lvlLabel}${autoClose?' · auto-close':''}${autoDN?' · auto-DN':''})`, scoreKind:'proof',
     prompt: autoClose
       ? `The tree below decomposes the premises plus the <em>denied</em> conclusion; self-contradictory branches are closed (✕) for you. Read the tree, then judge the argument.`
       : `The tree below decomposes the premises plus the <em>denied</em> conclusion. Close every self-contradictory branch (click "open" to toggle ✕), then judge the argument.`,
@@ -4606,8 +4625,8 @@ function gTree(level){
     const askVerdict=()=>{
       root.querySelector('#trStep').innerHTML=`<div class="feedback info show" style="display:block">${autoClose?'Read the tree':'✔ Branches right'}. So — is the argument valid?
         <div class="rowbtns"><button class="primary" id="tv">Valid</button><button class="ghost" id="ti">Invalid</button></div></div>`;
-      root.querySelector('#tv').onclick=()=>{ if(valid) awardCorrect(p.explain()); else penalizeWrong('Is every branch closed?',p.explain()); };
-      root.querySelector('#ti').onclick=()=>{ if(!valid) awardCorrect(p.explain()); else penalizeWrong('Is every branch closed?',p.explain()); };
+      root.querySelector('#tv').onclick=()=>{ if(valid) awardCorrect(p.explain()); else penalizeWrong('Is every branch closed?',p.explain(), {cost:scoringOn()?2*state.level:0, end:true}); };
+      root.querySelector('#ti').onclick=()=>{ if(!valid) awardCorrect(p.explain()); else penalizeWrong('Is every branch closed?',p.explain(), {cost:scoringOn()?2*state.level:0, end:true}); };
     };
     if(autoClose){
       btns.forEach(b=>{ if(b.dataset.closed==='1'){ b.classList.add('closed'); b.textContent='✕ closed'; } b.disabled=true; });
@@ -4621,7 +4640,7 @@ function gTree(level){
         root.querySelector('#trCheck').disabled=true;
         askVerdict();
       } else {
-        penalizeWrong(`${wrongN} branch${wrongN>1?'es are':' is'} marked wrongly. A branch closes only if some wff and its contradictory both appear on it (counting inherited lines).`, p.explain());
+        penalizeWrong(`${wrongN} branch${wrongN>1?'es are':' is'} marked wrongly. A branch closes only if some wff and its contradictory both appear on it (counting inherited lines).`, p.explain(), {end:false});
       }
     };
   };
@@ -5472,7 +5491,8 @@ function mountQCopi(root, premAsts, conclAst, opts){
     rulesEl.querySelectorAll('.copirule').forEach(b=>b.onclick=()=>{ if(done) return; rule=(rule===b.dataset.r?null:b.dataset.r); renderRules(); updateSel(); });
   }
   function updateSel(){ selEl.textContent=`Rule: ${rule||'—'}   Lines: ${[...sel].sort((a,b)=>a-b).join(', ')||'—'}`; }
-  function deduct(){ if(opts.scored && state.level>0){ session.points=Math.max(0,session.points-pointsForWrong()); updateScoreBar(); } }
+  let copiRejected=false;
+  function deduct(){ if(!opts.scored||!scoringOn()) return 0; const c=copiRejected?0:2*state.level; applyDelta(-c); if(c) copiRejected=true; return c; }
   function step(msg,cls){ fb.className='feedback '+(cls||'no')+' show'; fb.innerHTML=msg; }
   function add(){
     if(done) return;
@@ -5495,14 +5515,14 @@ function mountQCopi(root, premAsts, conclAst, opts){
         if(opts.scored) awardCorrect(opts.p?opts.p.explain():'Proof complete.');
         else step('🎉 <b>Proved!</b> The conclusion is derived. Reset to try another, or go back.','ok');
       }
-      else step('✓ Line added.','ok');
+      else { copiRejected=false; step('✓ Line added.','ok'); }
     } else {
       if(opts.scored) tlog('w');
-      deduct();
+      const copiCost=deduct();
       const why = res==='oldconst' ? 'EI must instantiate to a NEW constant — one that appears nowhere earlier in the proof.'
                 : res==='frozen'   ? 'UG can’t generalize on that constant — it occurs in the premises or came from EI, so it isn’t arbitrary.'
                 : 'Check the rule and the cited lines, then try again.';
-      step(`That step doesn’t follow by <b>${rule}</b> (${QCOPI_NAME[rule]})${sel.size?` from line ${[...sel].sort((a,b)=>a-b).join(', ')}`:''}.${opts.scored&&state.level>0?` (−${pointsForWrong()})`:''} ${why}`,'no');
+      step(`That step doesn’t follow by <b>${rule}</b> (${QCOPI_NAME[rule]})${sel.size?` from line ${[...sel].sort((a,b)=>a-b).join(', ')}`:''}.${copiCost?` (−${copiCost})`:''} ${why}`,'no');
     }
   }
   renderLines(); renderRules(); updateSel();
@@ -5510,9 +5530,10 @@ function mountQCopi(root, premAsts, conclAst, opts){
   inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); add(); } });
   $$('#copiQuit').onclick=()=>{
     if(opts.scored){
-      tlog('q'); deduct(); done=true; fb.className='feedback no show';
-      fb.innerHTML=`You quit this proof.${state.level>0?` (−${pointsForWrong()})`:''}
+      tlog('q'); const c=deduct(); done=true; fb.className='feedback no show';
+      fb.innerHTML=`You quit this proof.${c?` (−${c})`:''}
         <div class="rowbtns"><button class="primary" onclick="nextProblem()">Next problem →</button></div>`;
+      endProblemScore();
     } else { mountQCopi(root, premAsts, conclAst, opts); }
   };
   if(opts.onBack){ const bb=$$('#copiBack'); if(bb) bb.onclick=(typeof opts.onBack==='function'?opts.onBack:()=>nextProblem()); }
@@ -5677,7 +5698,7 @@ function mountMCopi(root, premAsts, conclAst, opts){
       constsOf(ast).forEach(t=>ctx.used.add(t));
       inp.value=''; sel=new Set(); rule=null; renderLines(); renderRules(); updateSel();
       if(w===''&&qEq(ast,conclAst)){ done=true; step('🎉 <b>Proved!</b> The conclusion is derived in the actual world. Reset to try another, or go back.','ok'); }
-      else step('✓ Line added.','ok');
+      else { copiRejected=false; step('✓ Line added.','ok'); }
     } else {
       const why = res==='oldworld' ? 'Drop diamond needs a NEW world — one with no lines yet (prefix “W:”, “WW:”, …).'
                 : res==='noticket' ? `In system ${ctx.system} you can’t drop that box into ${w?('world '+w):'the actual world'} — no travel ticket allows it.`
@@ -5787,7 +5808,7 @@ function qcopiSchemas(lvl){
 }
 function iCopi(lvl){
   const s=pick(qcopiSchemas(lvl))();
-  const p={ setLine:`Set I — Copi Proofs (${I_LVL_NAME[lvl]||lvl})`, mode:'custom',
+  const p={ setLine:`Set I — Copi Proofs (${I_LVL_NAME[lvl]||lvl})`, mode:'custom', scoreKind:'proof',
     prompt:`Prove the conclusion, Copi style: type the next wff, pick a rule, then click the earlier line numbers it follows from. Keep going until you reach the conclusion. (Every argument here is valid.)`,
     instr:`Propositional rules: MP, MT, HS, DS, Simp, Conj, Add, DN, DeM. Quantifier rules: UI — drop a universal to any constant · EI — drop an existential to a NEW constant · EG — generalize a constant to ${qE('x')} · UG — generalize to ${qU('x')}, only on an arbitrary constant (not in the premises, not from EI) · QN — quantifier negation (${SYM.not}${qU('x')} ⇔ ${qE('x')}${SYM.not}). Id — identity: a=a is free, and equals substitute for equals.`,
     explain:()=>'Proof complete.' };
@@ -6862,7 +6883,7 @@ function pFinish(it,kind){
     prompt:`${it.q}${it.viz?viz(it.viz):''}`,
     diceTable:!!it.twoDice,
     instr:`Probability = favorable cases ÷ equally likely total cases. P(not A) = 1 − P(A); necessary truth = 100%; self-contradiction = 0%. Independent: P(A and B) = P(A)·P(B). Mutually exclusive: P(A or B) = P(A)+P(B); otherwise subtract the overlap. P(B|A) = P(A and B)/P(A).`,
-    mode:'mc', noKeyboard:true,
+    mode:'mc', noKeyboard:true, scoreKind:'probMC',
     choices: mc(ansStr, shuffle(D)),
     explain:()=>`Answer: <b>${ansStr}</b> (= ${pct}%). ${it.exp}`
   };
@@ -6907,7 +6928,7 @@ function pOdds(){
   return { setLine:'Set P — Probability (odds)', scratch:true,
     prompt:`${it.q}${it.viz?viz(it.viz):''}`,
     instr:`Odds compare favorable to unfavorable cases. More unfavorable → "x to y against" = unfavorable/favorable; more favorable → "in favor" = favorable/unfavorable; equal → even. Convert: odds x to y in favor → P = x/(x+y); x to y against → P = y/(x+y).`,
-    mode:'mc', noKeyboard:true,
+    mode:'mc', noKeyboard:true, scoreKind:'probOddsMC',
     choices: mc(it.a, it.d),
     explain:()=>`Answer: <b>${it.a}</b>. ${it.exp}` };
 }
@@ -9713,7 +9734,7 @@ function mountKlima(root, premAsts, conclAst, opts){
       constsOf(ast).forEach(t=>ctx.used.add(t));
       inp.value=''; sel=new Set(); rule=null; renderLines(); renderRules(); updateSel();
       if(qEq(ast,conclAst)){ done=true; step('🎉 <b>Proved in medieval term logic!</b> The conclusion is derived. Reset to try another, or go back.','ok'); }
-      else step('✓ Line added.','ok');
+      else { copiRejected=false; step('✓ Line added.','ok'); }
     } else {
       const why = res==='notaffirm' ? 'That move needs an <b>affirmative</b> matrix (built from predications by • alone) — negative forms are true of the zero-entity, so no import.'
                 : res==='unsound'   ? 'The syntactic pattern matched, but the step is not semantically valid in medieval term logic — a countermodel exists. Check which side of the square you are on.'
@@ -10435,7 +10456,7 @@ function nextProblem(){
   const s=SETS[session.set]; if(!s) return;
   const opts={ harder: s.hasHarder && state.harder, type: state.type };
   session.current = s.gen(opts);
-  session.tries=0; session.lastAnswer=undefined;
+  session.tries=0; session.lastAnswer=undefined; session.lastPenalty=undefined; session.scoreEnded=false;
   tlog('p',{p:plainText(session.current.prompt)});
   renderProblem();
 }
@@ -10520,9 +10541,111 @@ window.ins=function(ch){ const i=$('ansInput'); if(!i)return; const s=i.selectio
   i.value=i.value.slice(0,s)+ch+i.value.slice(i.selectionEnd||s); i.focus(); i.selectionStart=i.selectionEnd=s+ch.length; };
 window.backspace=function(){ const i=$('ansInput'); if(!i)return; i.value=i.value.slice(0,-1); i.focus(); };
 
-/* ---- scoring primitives (shared by MC, type, and custom activities) ---- */
-function pointsForWrong(){ return state.level; } // lose = level (0 => practice)
-function pointsForRight(){ return 10; }
+/* ---- scoring primitives (Gensler's original LogiCola, 2020-12-07) ----
+   Right-answer points are the same at every level; the level L (1–9) sets
+   only the penalty. Level 0 turns scoring off. The score may go below 0
+   while a problem is open; when the problem ends, a negative total is
+   reset to 0 (so -7 then a +5 finish becomes 0, not -2). */
+const SCORE_PROFILES={
+  mcTrans:      {right:5,  wrong:'half2L'},
+  starHow:      {right:5,  wrong:'quarter2L'},
+  typeTrans:    {right:7,  wrong:'twoL', tries:1},
+  twoChoice:    {right:10, wrong:'fourL', tries:1},
+  derive:       {right:10, wrong:'threeL', tries:1},
+  fallacies:    {right:8,  wrong:'twoL', tries:2, noCreditAfterMiss:true, lastMissFree:true},
+  infer:        {right:7,  wrong:'half3L'},
+  defs:         {right:7,  wrong:'twoL'},
+  findConcl:    {right:7,  wrong:'half3L'},
+  probOddsMC:   {right:5,  wrong:'half2L'},
+  probOddsType: {right:5,  wrong:'twoL', tries:1},
+  probPct:      {right:10, wrong:'twoL', tries:1},
+  probMC:       {right:10, wrong:'half2L'},
+  dTable:       {right:10, wrong:'half2L'},
+  dUnknown:     {right:10, wrong:'half2L'},
+  venn:         {right:10, wrong:'half2L'},
+  proof:        {right:20, wrong:'twoL'}
+};
+function scoringOn(){ return state.level>0; }
+function inferScoreKind(p){
+  if(p&&p.scoreKind) return p.scoreKind;
+  const set=session.set, mode=p&&p.mode, line=(p&&p.setLine)||'';
+  if(p&&p.deriveSlot) return 'derive';
+  if(p&&/Copi|Truth Trees|(Set [GIKMO] —.+(Proof|Tree))/i.test(p.setLine||'')) return 'proof';
+  if(/Deriving [Cc]onclusions/.test(line)) return 'derive';
+  if(/How to star|star the letters/i.test(line)) return 'starHow';
+  if(/Find the conclusion/i.test(line)) return 'findConcl';
+  if(mode==='picklist' || set==='R' || /Fallacy/i.test(line)) return 'fallacies';
+  if(set==='F' || /Inference rules/i.test(line)) return 'infer';
+  if(set==='Q' || /Definition/i.test(line)) return 'defs';
+  if(set==='P' || /Set P/.test(line) || /Probability/i.test(line)){
+    if(/odds/i.test(line) && mode==='type') return 'probOddsType';
+    if(/odds/i.test(line)) return 'probOddsMC';
+    if(mode==='type') return 'probPct';
+    return 'probMC';
+  }
+  if(set==='S'){
+    if(mode==='tf') return 'twoChoice';
+    if(mode==='type') return 'typeTrans';
+    return 'mcTrans';
+  }
+  if(mode==='tf' || p&&p.noCreditAfterWrong) return 'twoChoice';
+  if(set==='D'){
+    if(/unknown/i.test(line)) return 'dUnknown';
+    if(/[Tt]ruth [Tt]able/.test(line)) return 'dTable';
+    if(/[Ee]val/.test(line) || mode==='tf') return 'twoChoice';
+  }
+  if(set==='B' && /Venn/i.test(line)) return 'venn';
+  if('ACJHLN'.includes(set||'') && mode==='type') return 'typeTrans';
+  if('ACJHLN'.includes(set||'') && mode==='mc') return 'mcTrans';
+  if(mode==='mc') return 'mcTrans';
+  if(mode==='type') return 'typeTrans';
+  return 'twoChoice';
+}
+function scoreProfile(p){ return SCORE_PROFILES[inferScoreKind(p||session.current)]||SCORE_PROFILES.twoChoice; }
+function firstWrongCost(kind, L){
+  if(kind==='half2L'||kind==='quarter2L'||kind==='twoL') return 2*L;
+  if(kind==='half3L'||kind==='threeL') return 3*L;
+  if(kind==='fourL') return 4*L;
+  if(kind==='oneL') return L;
+  if(kind==='halfL') return Math.floor(L/2);
+  return 2*L;
+}
+function nextWrongCost(kind, prev){
+  if(kind==='quarter2L') return Math.floor(prev/4);
+  if(kind==='half2L'||kind==='half3L') return Math.floor(prev/2);
+  return prev;
+}
+function pendingWrongCost(p, opts){
+  if(!scoringOn()) return 0;
+  const prof=scoreProfile(p);
+  if(opts&&opts.cost!=null) return opts.cost;
+  if(opts&&opts.free) return 0;
+  if(prof.lastMissFree && session.tries>=1) return 0;
+  if(session.lastPenalty==null) return firstWrongCost(prof.wrong, state.level);
+  return nextWrongCost(prof.wrong, session.lastPenalty);
+}
+function rightPoints(p){ return scoreProfile(p||session.current).right; }
+function endsAfterThisMiss(p){
+  const prof=scoreProfile(p);
+  const max=prof.tries;
+  if(!max) return false;
+  return (session.tries+1)>=max;
+}
+function applyDelta(n){
+  if(!scoringOn() || !n) return;
+  session.points+=n;
+  updateScoreBar();
+}
+function endProblemScore(){
+  if(session.points<0) session.points=0;
+  session.scoreEnded=true;
+  updateScoreBar();
+  if(session.points>=100) completeSet();
+  else focusNextProblem();
+}
+/* Kept as thin wrappers so older call sites and tests can still ask. */
+function pointsForWrong(){ return pendingWrongCost(session.current); }
+function pointsForRight(){ return rightPoints(session.current); }
 function nextBtn(){ return '<div class="rowbtns"><button class="primary" onclick="nextProblem()">Next problem →</button></div>'; }
 /* A scored problem is finished when this button is on screen. Enter then
    goes to the next problem, including when focus is still in the answer box.
@@ -10555,39 +10678,88 @@ function enterGoesToNextProblem(e){
   if(overlay&&overlay.classList.contains('show')) return false;
   return !!visibleNextProblemButton();
 }
+function syllLooksWff(val){
+  const c=String(val).replace(/\s+/g,' ').trim().replace(/[.!]$/,'');
+  if(!c) return false;
+  return /^(all|no|some) [A-Za-z] is( not)? [A-Za-z]$/i.test(c) || /^[A-Za-z] is( not)? [A-Za-z]$/.test(c);
+}
+function typedTermLetters(s){
+  const t=String(s||'').replace(/\b(all|no|some|is|not|and|or|if|then|iff|only|unless|true|false)\b/gi,' ');
+  return new Set((t.match(/[A-Za-z]/g)||[]).map(ch=>ch.toLowerCase()));
+}
+function usesWrongLetters(input, answer){
+  const want=typedTermLetters(answer);
+  if(!want.size) return false;
+  for(const ch of typedTermLetters(input)) if(!want.has(ch)) return true;
+  return false;
+}
+function typedFreeRetryMessage(p, val){
+  if(inferScoreKind(p)!=='typeTrans') return null;
+  const raw=String(val||'');
+  if(p.accept && p.answer && p.accept(raw, p.answer)) return null;
+  if(p.answer && raw.replace(/\s+/g,' ').trim().toLowerCase()===String(p.answer).replace(/\s+/g,' ').trim().toLowerCase())
+    return 'Right structure — check the <b>letter case</b> and edit your answer. No points lost.';
+  if(session.set==='A' && !syllLooksWff(raw))
+    return 'That isn\'t a syllogistic wff. A wff has one of the eight forms (all/no/some A is B, a is A, a is b, and the "not" forms). Edit it and try again. No points lost.';
+  if('CHJLN'.includes(session.set||'')){
+    try{ if(typeof parseProp==='function' && !parseProp(raw)) return 'That isn\'t a well-formed formula — check your parentheses and symbols. Edit it and try again. No points lost.'; }
+    catch(e){ return 'That isn\'t a well-formed formula — check your parentheses and symbols. Edit it and try again. No points lost.'; }
+  }
+  if(p.isWff && !p.isWff(raw))
+    return 'That isn\'t a well-formed formula. Edit it and try again. No points lost.';
+  if(p.answer && usesWrongLetters(raw, p.answer)){
+    const d=p.diagnose && p.diagnose(raw);
+    return (d||'You didn\'t use the right letters.')+' Edit your answer. No points lost.';
+  }
+  return null;
+}
 /* opts.noPoints: right answer, but no points (a valid/invalid choice made
-   after the other one was already marked wrong — only one choice was left). */
+   after the other one was already marked wrong, or a right answer after a
+   miss on a one-credit item such as a fallacy).
+   opts.end: default true — clamp a negative score and offer Next. */
 function awardCorrect(explainHtml, praise, opts){
-  const noPts=!!(opts&&opts.noPoints);
-  if(session.current&&session.current.deriveSlot) deriveReviewNote(session.current.deriveSlot, session.tries>0?'recovered':'right');
+  const p=session.current;
+  const prof=scoreProfile(p);
+  const noPts=!!(opts&&opts.noPoints) || (prof.noCreditAfterMiss && session.tries>0);
+  const pts=(!noPts && scoringOn()) ? rightPoints(p) : 0;
+  if(p&&p.deriveSlot) deriveReviewNote(p.deriveSlot, session.tries>0?'recovered':'right');
   tlog('c',{a:session.lastAnswer,n:session.tries||0}); session.lastAnswer=undefined;
   beep('good');
-  const fb=$('fb'); if(!fb) return;
-  fb.className='feedback ok show';
-  fb.innerHTML = noPts
-    ? `✅ <b>Right — that's the answer.</b> No points this time, since it was the only choice left after the wrong one. ${explainHtml||''}${nextBtn()}`
-    : `✅ <b>${praise||pick(['Correct!','Right!','Good!','Nicely done!','Yes!'])}</b> +${pointsForRight()} points. ${explainHtml||''}${nextBtn()}`;
-  if(!noPts) session.points += (state.level>0?pointsForRight():10);
-  updateScoreBar();
-  if(session.points>=100) completeSet();
-  else focusNextProblem();
+  const fb=$('fb');
+  if(fb){
+    fb.className='feedback ok show';
+    const end=!(opts&&opts.end===false);
+    if(noPts){
+      fb.innerHTML=`✅ <b>Right — that's the answer.</b> No points this time.${explainHtml?(' '+explainHtml):''}${end?nextBtn():''}`;
+    } else if(!scoringOn()){
+      fb.innerHTML=`✅ <b>${praise||pick(['Correct!','Right!','Good!','Nicely done!','Yes!'])}</b> ${explainHtml||''}${end?nextBtn():''}`;
+    } else {
+      fb.innerHTML=`✅ <b>${praise||pick(['Correct!','Right!','Good!','Nicely done!','Yes!'])}</b> +${pts} points. ${explainHtml||''}${end?nextBtn():''}`;
+    }
+  }
+  applyDelta(pts);
+  if(!(opts&&opts.end===false)) endProblemScore();
 }
-function penalizeWrong(hintHtml, revealHtml){
+function penalizeWrong(hintHtml, revealHtml, opts){
   tlog('w',{a:session.lastAnswer}); session.lastAnswer=undefined;
   beep('bad');
-  session.tries++;
-  if(session.tries>=2 && session.current&&session.current.deriveSlot) deriveReviewNote(session.current.deriveSlot, 'miss');
-  if(state.level>0) session.points=Math.max(0,session.points-pointsForWrong());
-  updateScoreBar();
-  const fb=$('fb'); if(!fb) return session.tries;
+  const p=session.current;
+  const end= opts&&opts.end===false ? false : (opts&&opts.end===true ? true : endsAfterThisMiss(p));
+  const free=!!(opts&&opts.free);
+  const cost= pendingWrongCost(p, {free, cost:opts&&opts.cost});
+  if(!free) session.tries++;
+  if(cost){ applyDelta(-cost); session.lastPenalty=cost; }
+  const fb=$('fb');
+  const shown=scoringOn()&&cost?` (−${cost})`:(scoringOn()&&!cost?' (−0)':'');
+  if(p&&p.deriveSlot && end) deriveReviewNote(p.deriveSlot, 'miss');
+  if(!fb){ if(end) endProblemScore(); return session.tries; }
   fb.className='feedback no show';
-  const cost=state.level>0?` (−${pointsForWrong()})`:'';
-  if(session.tries===1 && hintHtml!=null){
-    fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${cost} ${hintHtml||'Try again.'}`;
+  if(!end){
+    fb.innerHTML=`❌ <b>Sorry, I don't like your answer.</b>${shown} ${hintHtml||'Try again.'}`;
     const inp=$('ansInput'); if(inp) inp.focus();
   } else {
-    fb.innerHTML=`❌ <b>Not quite.</b>${cost} ${revealHtml||''}${nextBtn()}`;
-    focusNextProblem();
+    fb.innerHTML=`❌ <b>Not quite.</b>${shown} ${revealHtml||hintHtml||''}${nextBtn()}`;
+    endProblemScore();
   }
   return session.tries;
 }
@@ -10596,16 +10768,16 @@ window.answerMC=function(i){
   const p=session.current; const btns=[...document.querySelectorAll('.choice')];
   const c=p.choices[i];
   if(!btns[i]||btns[i].classList.contains('bad')||btns[i].classList.contains('good')) return;
+  if(session.scoreEnded) return;
   session.lastAnswer=plainText(c.text).slice(0,80);
   if(c.correct){ btns[i].classList.add('good'); disableChoices(false);
-    // syllogism valid/invalid: after a wrong pick the other answer earns nothing
-    awardCorrect(p.explain?p.explain():'', null, {noPoints: !!p.noCreditAfterWrong && session.tries>0}); }
+    awardCorrect(p.explain?p.explain():''); }
   else{
     btns[i].classList.add('bad');
-    // diagnosis of the specific wrong choice, when available (LogiCola-style)
     const why = c.why || (p.diagnose && p.diagnose(c.text)) || hintFor(p);
+    const ending=endsAfterThisMiss(p);
     const t=penalizeWrong(why, p.explain?p.explain():'');
-    if(t>=2) disableChoices(true);
+    if(ending) disableChoices(true);
   }
 };
 /* ---- Set R picklist (all fallacies in two columns + collapsible description) ---- */
@@ -10645,8 +10817,9 @@ window.answerPick=function(){
     items[i].classList.add('bad');
     items[i].classList.remove('sel');
     const why=(p.diagnose&&p.diagnose(name))||'Not that one — pick another name from the list.';
+    const ending=endsAfterThisMiss(p);
     const t=penalizeWrong(why, p.explain?p.explain():'');
-    if(t>=2) disablePicklist(true);
+    if(ending) disablePicklist(true);
     else {
       session.pickSel=undefined;
       const conf=$('pickConfirm'), hint=$('pickHint');
@@ -10663,15 +10836,23 @@ function disablePicklist(revealCorrect){
     b.onclick=null; b.disabled=true; b.classList.remove('sel');
     if(revealCorrect && pickOptName(p.options[i])===p.answer) b.classList.add('good');
   });
-}
+};
 /* ---- type ---- */
 window.answerType=function(){
   const p=session.current; const val=$('ansInput').value; if(!val.trim()) return;
+  if(session.scoreEnded) return;
   session.lastAnswer=val.trim().slice(0,80);
   const ok = p.accept ? p.accept(val,p.answer) : (val.trim()===p.answer);
   if(ok){ awardCorrect(p.explain?p.explain():''); const i=$('ansInput'); if(i) i.disabled=true; }
-  else { penalizeWrong((p.diagnose && p.diagnose(val)) || hintFor(p), p.explain?p.explain():''); }
+  else {
+    const free=typedFreeRetryMessage(p, val);
+    if(free){ penalizeWrong(free, p.explain?p.explain():'', {free:true, end:false}); return; }
+    const ending=endsAfterThisMiss(p);
+    penalizeWrong((p.diagnose && p.diagnose(val)) || hintFor(p), p.explain?p.explain():'');
+    if(ending){ const i=$('ansInput'); if(i) i.disabled=true; }
+  }
 };
+
 function hintFor(p){
   if(p.mode==='tf') return 'reconsider the test described below.';
   if(p.mode==='mc') return 'eliminate the option you tried and look again.';
@@ -10920,7 +11101,7 @@ const INFO={
    During an exercise, Help opens straight to that set's guide. */
 function helpIntroHtml(){
   return `<p><b>Set up:</b> enter your name and scoring level in <b>Options</b>, then choose a set from <b>Exercise Sets</b>. Many sets have several kinds of exercise and easier/harder levels — pick these when you load the set.</p>
-    <p><b>Scoring:</b> reach <b>100 points</b> to complete a set. Right answers add points; wrong ones cost points — more at higher levels (9 hardest, 1 easiest, 0 = practice with no scoring). It's <b>no-fault</b>: only completions are recorded, and you keep the highest level you reach. Problems are freshly generated (or drawn from the set's bank), so you get new ones each time.</p>
+    <p><b>Scoring:</b> reach <b>100 points</b> to complete a set. A right answer adds points (the amount depends on the exercise); a wrong answer costs points — more at higher levels (9 hardest, 1 easiest, 0 = practice with no scoring). The score can drop below 0 during a problem, then returns to 0 when that problem ends. It's <b>no-fault</b>: only completions are recorded, and you keep the highest level you reach. Problems are freshly generated (or drawn from the set's bank), so you get new ones each time.</p>
     <p><b>During a problem:</b> pick or type your answer; you get feedback and a hint after a wrong answer. <b>Show answer</b> reveals it; <b>Skip</b> moves on. A <b>scratch space</b> appears on the reasoning-heavy sets. <b>About This Exercise</b> says what the set is for; <b>Help</b> (this) gives the how-to.</p>`;
 }
 function helpSymbolsHtml(){

@@ -2653,32 +2653,125 @@ function validConclusions(prem,letters,model){
   const once=Object.keys(count).filter(k=>count[k]===1);
   if(once.length!==2) return [];
   const [x,y]=once; const out=[]; const seen=new Set();
-  const key=st=>{ if(st.t==='all')return 'all:'+st.a+st.b; if(st.t==='somenot')return 'somenot:'+st.a+st.b;
+  const key=st=>{ if(st.t==='all'||st.t==='somenot'||st.t==='is'||st.t==='isnot') return st.t+':'+st.a+st.b;
     return st.t+':'+[st.a,st.b].sort().join(''); };
-  for(const t of ['all','no','some','somenot']) for(const [a,b] of [[x,y],[y,x]]){
-    const c={t,a,b};
-    if(catValidM(prem,c,letters,model)){ const k=key(c); if(!seen.has(k)){ seen.add(k); out.push(c); } }
+  const ok=c=>starTestG(prem,c,model||'modern');
+  const X=/[A-Z]/.test(x), Y=/[A-Z]/.test(y);
+  const cands=[];
+  if(X&&Y){ for(const t of ['all','no','some','somenot']) for(const [a,b] of [[x,y],[y,x]]) cands.push({t,a,b}); }
+  else if(!X&&Y){ for(const t of ['is','isnot']) cands.push({t,a:x,b:y}); }
+  else if(X&&!Y){ for(const t of ['is','isnot']) cands.push({t,a:y,b:x}); }
+  else { for(const t of ['ident','identnot']) for(const [a,b] of [[x,y],[y,x]]) cands.push({t,a,b}); }
+  // also, two names predicated of the same general terms can yield a "some" conclusion
+  if(!X||!Y){
+    const caps=Object.keys(count).filter(k=>/[A-Z]/.test(k) && count[k]===1);
+    if(caps.length===2) for(const t of ['all','no','some','somenot']) for(const [a,b] of [[caps[0],caps[1]],[caps[1],caps[0]]]) cands.push({t,a,b});
   }
+  for(const c of cands){ if(ok(c)){ const k=key(c); if(!seen.has(k)){ seen.add(k); out.push(c); } } }
   return out;
+}
+// Gensler's derive rule: if a universal follows, give that, not the weaker "some".
+function strongestConclusions(cands){
+  if(!cands.length) return [];
+  const rank={all:3,no:3,is:3,isnot:3,ident:3,identnot:3,some:2,somenot:2};
+  const m=Math.max(...cands.map(c=>rank[c.t]||0));
+  return cands.filter(c=>(rank[c.t]||0)===m);
+}
+function relabelDerive(s){
+  const used=uniqStrings(s.prem.flatMap(x=>[x.a,x.b]));
+  const caps=used.filter(c=>/[A-Z]/.test(c)), smalls=used.filter(c=>/[a-z]/.test(c));
+  const capNew=sampleDistinct(['A','B','C','F','G','H','K','P','S'], Math.max(1,caps.length));
+  const smallNew=sampleDistinct(['a','b','c','d','e','j'], Math.max(1,smalls.length));
+  const ren={}; caps.forEach((c,i)=>ren[c]=capNew[i]); smalls.forEach((c,i)=>ren[c]=smallNew[i]);
+  const mp=st=>({t:st.t,a:ren[st.a],b:ren[st.b]});
+  s.prem=s.prem.map(mp);
+  if(Math.random()<0.5) s.prem=[s.prem[1],s.prem[0]];
+  const words=sampleDistinct(CATS, Math.max(1,caps.length)), names=sampleDistinct(NAMES, Math.max(1,smalls.length));
+  s.map={}; caps.forEach((c,i)=>s.map[capNew[i]]=words[i]); smalls.forEach((c,i)=>s.map[smallNew[i]]={nm:names[i].nm});
+  s.letters=caps.map((c,i)=>capNew[i]);
+  return s;
+}
+const _derivePoolCache={};
+function derivePools(model){
+  if(_derivePoolCache[model]) return _derivePoolCache[model];
+  const P=syllCatPools(model);
+  const buckets={all:[],no:[],some:[],somenot:[],noneNear:[],noneOther:[]};
+  const take=(f,near)=>{
+    const prem=[f.prem[0],f.prem[1]];
+    const cands=validConclusions(prem,['A','B','C'],model);
+    if(!cands.length){ (near?buckets.noneNear:buckets.noneOther).push(prem); return; }
+    const st=strongestConclusions(cands);
+    if(buckets[st[0].t]) buckets[st[0].t].push(prem);
+  };
+  P.valid.forEach(f=>take(f,false));
+  (P.exist||[]).forEach(f=>take(f,true));
+  (P.near||[]).forEach(f=>take(f,true));
+  (P.two||[]).forEach(f=>take(f,false));
+  (P.other||[]).forEach(f=>take(f,false));
+  return (_derivePoolCache[model]=buckets);
+}
+function nextDeriveSlot(){
+  if(!session.derivePlan) session.derivePlan={plan:[], used:{}};
+  const rec=session.derivePlan;
+  if(!rec.plan.length){
+    const types=['all','no','some','somenot'];
+    types.sort((a,b)=>(rec.used[a]||0)-(rec.used[b]||0) || Math.random()-0.5);
+    rec.plan=shuffle(['none','none','none','none','all','no','some','somenot','sing', types[0]]);
+  }
+  const k=rec.plan.shift();
+  rec.used[k]=(rec.used[k]||0)+1;
+  return k;
 }
 function bDerive(){
   const model=state.bImport||'modern';
-  // often nothing follows — the student must decide, then state the conclusion
-  const wantConcl = Math.random() < 0.6;
-  let s,cands,tries=0;
-  do{ s=makeSyll({}); cands=validConclusions(s.prem,s.letters,model); tries++; }
-  while(tries<300 && (cands.length>1 || (cands.length===1)!==wantConcl));
+  const P=derivePools(model);
+  const slot=nextDeriveSlot();
+  const sk=nextSyllKind('derive', true);
+  const wantSing = slot==='sing' || (slot==='none' && sk!=='none') || ((slot==='some'||slot==='somenot') && sk!=='none');
+  let s, allCands=[], strong=[], tries=0;
+  const fromPrem=prem=>{
+    s=relabelDerive({prem:[ {t:prem[0].t,a:prem[0].a,b:prem[0].b}, {t:prem[1].t,a:prem[1].a,b:prem[1].b} ]});
+    allCands=validConclusions(s.prem,s.letters,model);
+    strong=strongestConclusions(allCands);
+  };
+  const trySing=()=>{
+    const nNames = sk==='multi'?2 : 1;
+    const want = slot!=='none';
+    const t=makeSyllSingular(want, model, slot==='some'||slot==='somenot', nNames);
+    s=relabelDerive({prem:[ {t:t.prem[0].t,a:t.prem[0].a,b:t.prem[0].b}, {t:t.prem[1].t,a:t.prem[1].a,b:t.prem[1].b} ]});
+    allCands=validConclusions(s.prem,s.letters,model);
+    strong=strongestConclusions(allCands);
+  };
+  const typeOf=()=> !strong.length ? 'none' : (/[a-z]/.test(strong[0].a)||/[a-z]/.test(strong[0].b) ? 'sing' : strong[0].t);
+  do{
+    tries++;
+    if(wantSing){
+      trySing();
+      if(typeOf()===slot || (slot==='sing' && typeOf()==='sing') || (slot==='none' && !strong.length)) break;
+    }
+    if(slot==='none'){
+      const pool=(P.noneNear.length && Math.random()<0.85)?P.noneNear:(P.noneOther.length?P.noneOther:P.noneNear);
+      if(pool.length) fromPrem(pick(pool));
+    } else if(slot==='sing'){
+      trySing();
+    } else if(P[slot] && P[slot].length){
+      fromPrem(pick(P[slot]));
+    }
+  } while(tries<80 && typeOf()!==slot && !(slot==='sing' && typeOf()==='sing'));
+  if(!s){ const fb=(P.all&&P.all[0])||(P.noneNear&&P.noneNear[0]); if(fb) fromPrem(fb); }
   const NONE_RX=/^(none|nothing|no conclusion( validly)?( follows)?|nothing( validly)? follows)$/;
-  const answer = cands.length===1 ? catStr(cands[0]) : 'none';
+  const answer = strong.length ? catStr(strong[0]) : 'none';
   return { setLine:`Set B — Deriving Conclusions (${modelLabel(model)})`, scratch:true, noKeyboard:true,
     prompt:`State the conclusion that validly follows from these premises (using both premises) — or answer <b>none</b> if nothing follows.<br><br><span class="wff argblock">${catStr(s.prem[0])}<br>${catStr(s.prem[1])}<br>${SYM.therefore} ?</span>`,
-    instr:`Type the conclusion the way the premises are written — e.g. “no A is C” or “some A is not C” — or type “none.” A valid conclusion uses the two letters that occur once in the premises. On the ${modelLabel(model)} model${model==='traditional'?', a universal pair can also yield a "some" conclusion, since the terms are assumed non-empty':''}. If the star rules are broken, nothing follows.`,
+    instr:`Type the conclusion the way the premises are written — e.g. “no A is C,” “some A is not C,” or “a is C” — or type “none.” A valid conclusion uses the two letters that occur only once in the premises. If a universal (“all” or “no”) follows, give that (the strongest), not the weaker “some.” On the ${modelLabel(model)} model${model==='traditional'?', a universal pair also yields a "some" conclusion, since the terms are assumed non-empty; the stronger one is the answer':''}. If the star rules are broken, nothing follows.`,
     answer,
     accept:(v,ans)=>{
       const t=String(v).replace(/\s+/g,' ').trim().toLowerCase().replace(/[.!]$/,'');
       if(ans==='none') return NONE_RX.test(t);
       if(NONE_RX.test(t)) return false;
-      return acceptSyll(v.replace(/[.!]$/,''),ans);
+      const v2=v.replace(/[.!]$/,'');
+      if(acceptSyll(v2,ans)) return true;
+      return allCands.some(c=>acceptSyll(v2, catStr(c)));
     },
     diagnose:(v)=>{
       const t=String(v).trim();
@@ -2686,15 +2779,18 @@ function bDerive(){
       const middles=Object.keys(count).filter(k=>count[k]>1&&/[A-Z]/.test(k));
       const usedMid=(t.match(/[A-Z]/g)||[]).find(L=>middles.includes(L));
       if(usedMid) return `Your conclusion uses <b>${usedMid}</b>, which occurs twice in the premises — the middle term drops out. A valid conclusion uses the two letters that occur only <b>once</b>.`;
-      if(NONE_RX.test(t.toLowerCase().replace(/[.!]$/,'')) && cands.length===1)
+      if(NONE_RX.test(t.toLowerCase().replace(/[.!]$/,'')) && strong.length)
         return `Something does follow here — run the star test: with the right conclusion, every capital gets starred ${model==='traditional'?'at least once':'exactly once'} and there's exactly one right-hand star.`;
-      if(cands.length!==1 && !NONE_RX.test(t.toLowerCase()))
+      if(!strong.length && !NONE_RX.test(t.toLowerCase()))
         return `Check the star test on your conclusion — the rules break, and in fact <b>nothing</b> validly follows from these premises.`;
       return null;
     },
-    explain:()=> cands.length===1
-      ? `The conclusion is <b>${wff(catStr(cands[0]))}</b> — in English, “${engStmt(cands[0],s.map)}” (${modelLabel(model)} model).`
-      : `No syllogistically valid conclusion follows from these premises (${modelLabel(model)} model).` };
+    explain:()=>{
+      if(!strong.length) return `No syllogistically valid conclusion follows from these premises (${modelLabel(model)} model).`;
+      const weak=allCands.filter(c=>!strong.some(s=>catStr(s)===catStr(c)));
+      const extra = weak.length ? ` Also valid, but weaker: ${weak.map(c=>wff(catStr(c))).join(', ')}.` : '';
+      return `The conclusion is <b>${wff(catStr(strong[0]))}</b> — in English, “${engStmt(strong[0],s.map)}” (${modelLabel(model)} model).${extra}`;
+    } };
 }
 /* ---- B: star the letters (interactive) ---- */
 // star-test reason: counts stars and right-hand stars, then the verdict
@@ -10292,7 +10388,7 @@ function openSetMenu(id){
   });
 }
 window.startSet=function(id){
-  session.set=id; session.points=0; session.current=null; session.syllPlan=null;
+  session.set=id; session.points=0; session.current=null; session.syllPlan=null; session.derivePlan=null;
   tlog('S');
   closeModal(); updateScoreBar(); nextProblem();
 };
@@ -10609,7 +10705,7 @@ function completeSet(){
       <button class="ghost" onclick="closeModal();fileMenu()">Another exercise</button>
     </div>`);
 }
-window.restartSet=function(){ closeModal(); session.points=0; session.syllPlan=null; nextProblem(); };
+window.restartSet=function(){ closeModal(); session.points=0; session.syllPlan=null; session.derivePlan=null; nextProblem(); };
 
 /* ---- scores view ---- */
 function scoresView(){

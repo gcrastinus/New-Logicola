@@ -3871,9 +3871,10 @@ function proofPlayer(cfg){
     const pl=(S.premAst&&S.premAst.length===premCount?S.premAst:S.prem.map(()=>null))
       .map((f,i)=>({f, w:'', asm:false, blocked:false, c:canonRaw(S.prem[i])}));
     let noPlan=false;
-    const fK=f=>qStr(f);
-    const fRender=f=> ENG&&ENG.name==='prop' ? astRender(f) : qRender(f);
-    const fTyped=f=> ENG&&ENG.name==='prop' ? astStr(f) : qRender(f);
+    const WORLD=!!(ENG&&ENG.name==='world');
+    const fK=f=> WORLD ? WE.key(f) : qStr(f);
+    const fRender=f=> WORLD ? WE.render(f) : ENG&&ENG.name==='prop' ? astRender(f) : qRender(f);
+    const fTyped=f=> WORLD ? WE.plain(f) : ENG&&ENG.name==='prop' ? astStr(f) : qRender(f);
     const negS=f=> f.op==='~' ? f.a : mkNeg(f);
     const isContra=(A,B)=>{
       if((A.w||'')!==(B.w||'')) return false;
@@ -3894,6 +3895,7 @@ function proofPlayer(cfg){
     /* every legal next line from the current live lines (engine-backed sets) */
     function legalCandidates(){
       const out=[]; if(!ENG) return out;
+      if(WORLD) return WE.candidates(pl).map(c=>mkStep(c.kind,c.w,c.f,c.just));
       const lv=liveIdx(), modal=ENG.name==='modal', quant=ENG.name==='quant';
       const liveHas=(w,f)=>lv.some(i=>(pl[i].w||'')===(w||'')&&pl[i].f&&fK(pl[i].f)===fK(f));
       const add=(kind,w,f,just)=>{ if(kind!=='raa'&&kind!=='asm'&&liveHas(w,f)) return; out.push(mkStep(kind,w,f,just)); };
@@ -3959,7 +3961,8 @@ function proofPlayer(cfg){
       const init=pl.map(L=>({f:L.f, w:L.w, asm:L.asm, blocked:L.blocked}));
       if(init.some(L=>!L.f)) return null;
       try{
-        const r= ENG.name==='prop' ? provePropositional(ENG.prems,ENG.concl,init)
+        const r= WORLD ? WE.prove(ENG.prems,ENG.concl,ENG.cfg,init)
+               : ENG.name==='prop' ? provePropositional(ENG.prems,ENG.concl,init)
                : ENG.name==='quant' ? proveQuant(ENG.prems,ENG.concl,ENG.opts,init)
                : proveModal(ENG.prems,ENG.concl,init);
         return r&&r.steps ? r.steps : null;
@@ -3979,8 +3982,8 @@ function proofPlayer(cfg){
        whose cited lines are already on the page is a valid move right now.
        Accepting it moves that step up and renumbers the justifications. */
     const autoJust = state.autoJust!==false;
-    const NEW_THING=/drop existential|drop diamond/;
-    const NEEDS_OLD=/drop universal|drop box|equals substitute|self-identity/;
+    const NEW_THING=/drop existential|drop diamond|drop R|B−|Kant/;
+    const NEEDS_OLD=/drop universal|drop box|drop O|B\+|indicative transfer|equals substitute|self-identity/;
     function eligibleSteps(){
       const cur=S.steps[idx]; if(!cur) return [];
       const out=[idx];
@@ -4034,7 +4037,8 @@ function proofPlayer(cfg){
       shown.push({no:lineN, body:`${ind}${st.kind==='asm'?'┌ ':''}${st.disp}`, jt:st.just||'', star:false});
       if(st.f) fs[lineN-1]=st.f;
       if(starMode==='auto'&&st.kind==='derive'&&st.just){
-        const m=st.just.match(/from (\d+)/); if(m) starLine(+m[1]);   // S-rule source, or the complex I-rule premise
+        const m=st.just.match(/from (\d+)/);
+        if(m && !/drop universal|drop box|drop O|B\+|indicative transfer|Kant|equals substitute|self-identity/.test(st.just)) starLine(+m[1]);   // S-rule source, complex I-rule premise, or a dropped weak operator (Gensler doesn't star ☐, O, u:, or universal lines)
       }
       if(st.kind==='asm') depth++;
     };
@@ -4094,6 +4098,18 @@ function proofPlayer(cfg){
           res.text=`Line ${n} is a <b>DIAMOND</b> (possibility). Can you drop it? Which kind of world does it need — old or new?`;
         else if(/drop box/.test(st.just))
           res.text=`Line ${n} is a <b>BOX</b> (necessity). Can you drop it? Into which worlds may it go?`;
+        else if(/drop R/.test(st.just))
+          res.text=`Line ${n} starts with <b>R</b> (permissible). Can you drop it? Which kind of deontic world does it need — old or new?`;
+        else if(/drop O/.test(st.just))
+          res.text=`Line ${n} starts with <b>O</b> (ought). Can you drop it? Into which deontic world (or, if there is none, which world)?`;
+        else if(/B−/.test(st.just))
+          res.text=`Line ${n} tells you <b>not</b> to believe something (an underlined u). What does rule B− say — and does it need an old belief world or a new one?`;
+        else if(/B\+/.test(st.just))
+          res.text=`Line ${n} tells you to believe something (an underlined u). Where does rule B+ put it?`;
+        else if(/Kant/.test(st.just))
+          res.text=`Line ${n} is an <b>ought</b>, and there are modal operators around. What does Kant's Law ("ought" implies "can") let you write?`;
+        else if(/indicative transfer/.test(st.just))
+          res.text=`Line ${n} is an <b>indicative</b> (not underlined). A deontic world shares the indicatives of the world it depends on — could you move it where you need it?`;
         else if(/equals substitute/.test(st.just))
           res.text=`Line ${n} is an <b>identity</b>. Look at line ${mm} — what do equals let you do to it?`;
         else res.text=formQ(fs[n-1],n,mm);
@@ -4548,6 +4564,17 @@ function launchCopiChecker(){
 }
 window.launchCopiChecker=launchCopiChecker;
 function gCopi(level){
+  const lv = level==='mixed' ? (Math.random()<0.5?'easier':'harder') : level;
+  const rc = Math.random()<0.8 ? genCopiRandom(lv) : null;
+  if(rc){
+    const sample=rc.sample.map((st,i)=>`${rc.prem.length+i+1}. ${st.w}  <span class="muted">{${st.from.join(', ')} ${st.rule}}</span>`).join('<br>');
+    const p={ setLine:`Set G — Copi Proofs (${level})`, mode:'custom', scoreKind:'proof',
+      prompt:`Prove the conclusion, Copi style: type the next wff, pick a rule, then click the earlier line numbers it follows from. Keep going until you reach the conclusion.`,
+      instr:`Inference rules (whole lines): MP, MT, HS, DS, CD, Simp, Conj, Add. Replacement rules (rewrite a wff or a part of it): DeM, Comm, Assoc, Dist, DN, Trans, Impl, Equiv, Exp, Taut. There is no “get answer” — but you can Quit (costs points), or open the Proof checker to try your own argument.`,
+      explain:()=>`Proved. One way to do it:<br><span class="wff" style="display:block;line-height:1.8">${sample}</span>` };
+    p.mount=(root)=>mountCopi(root, rc.prem, rc.concl, {scored:true, sample, p});
+    return p;
+  }
   const [A,B,C]=sampleDistinct(['A','B','C','D','E','G','H','K'],3);
   const pool = level==='easier' ? COPI_SCHEMAS.filter(s=>s(A,B,C).steps.length===1)
              : level==='harder' ? COPI_SCHEMAS.filter(s=>s(A,B,C).steps.length>1)
@@ -5241,7 +5268,7 @@ function makeIScript(mode, wantValid){
   for(let attempt=0; attempt<600; attempt++){
     const lvl=pick(modes);
     const cfg=LVLCFG[lvl];
-    const cand=CAND[lvl]();
+    const cand= Math.random()<0.75 ? candRandom(lvl==='all'?pick(['easier','harder','rel','ident']):lvl) : CAND[lvl]();
     const script=proveQuant(cand.prem, cand.concl, cfg);
     if(!script) continue;
     if(wantValid!==undefined && script.valid!==wantValid) continue;
@@ -5922,8 +5949,25 @@ const GALACTIC=[
   {p:`☐A`, c:`◊A`, sys:['T','S4','B','S5'], why:'holds everywhere: whatever is necessary is at least possible'},
 ];
 function kGalactic(){
-  const g=pick(GALACTIC);
   const sys=state.modalSystem||'S5';
+  const gen = Math.random()<0.8 ? genGalactic() : null;
+  if(gen){
+    const valid=gen.validIn.includes(sys);
+    const r=f=>qRender(f);
+    const lines=gen.prems.map(r).concat([SYM.therefore+' '+r(gen.concl)]).join('<br>');
+    const cm=gen.inv[sys];
+    const others=['T','S4','B','S5'];
+    const where = gen.validIn.length===4 ? 'is valid in T, S4, B, and S5' : gen.validIn.length ? 'is valid in '+gen.validIn.join(' and ')+' but not in '+others.filter(x=>!gen.validIn.includes(x)).join(' or ') : 'is invalid in all four systems';
+    return { setLine:`Set K — Galactic Travel (system ${sys})`, scratch:true,
+      prompt:`In system <b>${sys}</b>, is this argument valid?<br><br><span class="wff argblock">${lines}</span>`,
+      instr:`Dropping a diamond from world W1 into new world W2 issues a reusable travel ticket W1 ⇒ W2. To drop a box from W1 into W2: <b>T</b> needs a ticket W1 ⇒ W2; <b>S4</b> also allows a series of tickets; <b>B</b> also allows single tickets backwards; <b>S5</b> needs no tickets. (Change the system in this set’s menu.)`,
+      mode:'tf',
+      choices: shuffle([{text:'Valid',correct:valid},{text:'Invalid',correct:!valid}]),
+      noCreditAfterWrong:true,
+      explain:()=>`<b>${valid?'VALID':'INVALID'} in ${sys}</b> — this argument ${where}.`+
+        (cm?`<br>A galaxy that refutes it in ${sys} (W1 is the actual world): <span class="wff">${galModelHtml(cm,gen.Ls)}</span>`:'') };
+  }
+  const g=pick(GALACTIC);
   const valid=g.sys.includes(sys);
   const disp=x=>x.replace(/◊/g,SYM.diamond).replace(/☐/g,SYM.box);
   return { setLine:`Set K — Galactic Travel (system ${sys})`, scratch:true,
@@ -6142,6 +6186,762 @@ function kProof(level, kind){
     instr:`World prefixes ("W", "WW", …) name possible worlds; the blank prefix is the actual world. Reverse squiggles (${SYM.not}${SYM.box} ⇒ ${SYM.diamond}${SYM.not}, ${SYM.not}${SYM.diamond} ⇒ ${SYM.box}${SYM.not}); drop diamonds into a NEW world; drop boxes into each OLD world (these proofs assume S5). In typed mode, prefix world lines "W: …". RAA needs a contradiction in the SAME world. ${selfStar?'Click a line’s number to star (★) used-up lines — starring isn’t graded.':'LogiCola stars (★) used-up lines for you.'}`
   });
 }
+/* ============================================================================
+   WORLD ENGINE — Gensler's proof machinery for chapters 11.3, 12 and 13
+   (quantified modal, deontic, belief, willing, and rationality proofs).
+   One prover covers: propositional S- and I-rules; reverse squiggles for
+   ☐ ◇ O R and quantifiers; drop ◇ (new W world), drop R (new D world),
+   B− (new belief world), drop ∃ (new constant); then drop u: (B+), O (old
+   D worlds, or the same world if none — Hare's Law), ☐ (any old world) and
+   ∀ (old constants); indicative transfer (IT) between a deontic world and
+   the world it depends on; Kant's Law (OA ⊃ ◇A); further assumptions to
+   break wffs; RAA. Invalid arguments end in REFUTE only when the open
+   worlds give a model that really makes the premises true and the
+   conclusion false (checked by the semantics below), so no broken items.
+   ========================================================================== */
+const WE=(()=>{
+  const At=(n,imp)=>({op:'atom',n,imp:!!imp});
+  const Pr=(p,args,imp)=>({op:'pred',p,args,imp:!!imp});
+  const Ng=a=>({op:'~',a});
+  const Bn=(op,a,b)=>({op,a,b});
+  const Box=a=>({op:'box',a}), Dia=a=>({op:'dia',a});
+  const Ob=a=>({op:'O',a}), Pm=a=>({op:'R',a});
+  const Bel=(a,imp,ag)=>({op:'bel',ag:ag||'u',imp:!!imp,a});
+  const All=(v,a)=>({op:'all',v,a}), Ex=(v,a)=>({op:'ex',v,a});
+  const isVar=c=>/^[xyz]$/.test(c);
+  function key(f){
+    switch(f.op){
+      case 'atom': return f.n+(f.imp?'_':'');
+      case 'pred': return f.p+f.args.join('')+(f.imp?'_':'');
+      case '~': return '~'+key(f.a);
+      case '&': case '|': case '>': case '=': return '('+key(f.a)+f.op+key(f.b)+')';
+      case 'all': return '@'+f.v+key(f.a);
+      case 'ex': return 'E'+f.v+key(f.a);
+      case 'box': return '#'+key(f.a);
+      case 'dia': return '$'+key(f.a);
+      case 'O': return 'O'+key(f.a);
+      case 'R': return 'R'+key(f.a);
+      case 'bel': return f.ag+(f.imp?'!':'')+':'+key(f.a);
+    }
+    return '?';
+  }
+  const eq=(a,b)=>key(a)===key(b);
+  const neg=f=>f.op==='~'?f.a:Ng(f);
+  const contra=(x,y)=>{ const a=key(x), b=key(y); return a==='~'+b||b==='~'+a; };
+  function render(f){
+    const ul=s=>`<u>${s}</u>`;
+    switch(f.op){
+      case 'atom': return f.imp?ul(f.n):f.n;
+      case 'pred': return f.p+(f.imp?ul(f.args.join('')):f.args.join(''));
+      case '~': return SYM.not+render(f.a);
+      case '&': return '('+render(f.a)+' '+SYM.and+' '+render(f.b)+')';
+      case '|': return '('+render(f.a)+' '+SYM.or+' '+render(f.b)+')';
+      case '>': return '('+render(f.a)+' '+SYM.horseshoe+' '+render(f.b)+')';
+      case '=': return '('+render(f.a)+' '+SYM.threebar+' '+render(f.b)+')';
+      case 'all': return qU(f.v)+render(f.a);
+      case 'ex': return qE(f.v)+render(f.a);
+      case 'box': return SYM.box+render(f.a);
+      case 'dia': return SYM.diamond+render(f.a);
+      case 'O': return 'O'+render(f.a);
+      case 'R': return 'R'+render(f.a);
+      case 'bel': return (f.imp?ul(f.ag):f.ag)+':'+render(f.a);
+    }
+    return '?';
+  }
+  const plain=f=>render(f).replace(/<[^>]*>/g,'');
+  /* imperative = has an underlined part not inside O/R/u:/☐/◇ */
+  function isImp(f){
+    switch(f.op){
+      case 'atom': case 'pred': return f.imp;
+      case '~': case 'all': case 'ex': return isImp(f.a);
+      case '&': case '|': case '>': case '=': return isImp(f.a)||isImp(f.b);
+      default: return false;
+    }
+  }
+  function impOnly(f){            // every atom imperative (Kant's Law proviso)
+    switch(f.op){
+      case 'atom': case 'pred': return f.imp;
+      case '~': case 'all': case 'ex': return impOnly(f.a);
+      case '&': case '|': case '>': case '=': return impOnly(f.a)&&impOnly(f.b);
+      default: return false;
+    }
+  }
+  function deU(f){
+    switch(f.op){
+      case 'atom': return At(f.n,false);
+      case 'pred': return Pr(f.p,f.args,false);
+      case '~': return Ng(deU(f.a));
+      case 'all': return All(f.v,deU(f.a));
+      case 'ex': return Ex(f.v,deU(f.a));
+      case '&': case '|': case '>': case '=': return Bn(f.op,deU(f.a),deU(f.b));
+      default: return f;
+    }
+  }
+  function subst(f,v,c){
+    switch(f.op){
+      case 'atom': return f;
+      case 'pred': return Pr(f.p,f.args.map(x=>x===v?c:x),f.imp);
+      case 'all': case 'ex': return f.v===v?f:{op:f.op,v:f.v,a:subst(f.a,v,c)};
+      case 'bel': return Bel(subst(f.a,v,c),f.imp,f.ag);
+      case '~': case 'box': case 'dia': case 'O': case 'R': return {op:f.op,a:subst(f.a,v,c)};
+      default: return Bn(f.op,subst(f.a,v,c),subst(f.b,v,c));
+    }
+  }
+  function consts(f,s){
+    s=s||new Set();
+    if(f.op==='pred') f.args.forEach(x=>{ if(!isVar(x)) s.add(x); });
+    else if(f.op==='atom'){}
+    else if(f.b) { consts(f.a,s); consts(f.b,s); }
+    else if(f.a) consts(f.a,s);
+    return s;
+  }
+  function has(f,ops){ if(!f||f.op==='atom'||f.op==='pred') return false; if(ops.includes(f.op)) return true; return has(f.a,ops)||(f.b?has(f.b,ops):false); }
+  const isSimple=f=>f.op==='atom'||f.op==='pred'||(f.op==='bel'&&!f.imp)||(f.op==='~'&&(f.a.op==='atom'||f.a.op==='pred'||(f.a.op==='bel'&&!f.a.imp)));
+  /* ---- world prefixes: runs of one letter ("D", "DD", "Du", "DuD", "W") ---- */
+  const runs=w=>w?(w.match(/(.)\1*/g)||[]):[];
+  const parentOf=w=>{ const r=runs(w); return r.slice(0,-1).join(''); };
+  const kindOf=w=>w?w[w.length-1]:'';
+  const indBase=w=> kindOf(w)==='D' ? parentOf(w) : w;     // a deontic world shares its base world's indicatives
+  const beliefOk=w=>!/[a-zW]/.test(w);                       // B+ / B− only from prefixes without small letters or W
+  function childName(used,base,letter){
+    if(kindOf(base)===letter) return null;                   // would merge runs (nested same-kind operators): not generated
+    let k=1; while(used.has(base+letter.repeat(k))) k++;
+    return base+letter.repeat(k);
+  }
+  function wName(used){ let k=1; while(used.has('W'.repeat(k))) k++; return 'W'.repeat(k); }
+  const CPOOL=['a','b','c','d','e','g','h','j','k','m'];
+
+  /* ---------------- the prover ---------------- */
+  function prove(prems, concl, cfg, init){
+    cfg=cfg||{};
+    const CAP=cfg.cap||60, MAXC=cfg.maxConsts||3, MAXW=cfg.maxWorlds||6;
+    const lines=init ? init.map(L=>({w:L.w||'',f:L.f,asm:!!L.asm,blocked:!!L.blocked}))
+                     : prems.map(f=>({w:'',f,asm:false,blocked:false}));
+    const steps=[];
+    const used=new Set(['']); lines.forEach(L=>used.add(L.w));
+    const dropped=new Set();               // weak-operator lines already dropped
+    const live=()=>lines.map((L,i)=>({L,i})).filter(x=>!x.L.blocked);
+    const liveHas=(w,f)=>lines.some(L=>!L.blocked&&L.w===w&&eq(L.f,f));
+    const allConsts=()=>{ const s=new Set(); lines.forEach(L=>consts(L.f,s)); return [...s]; };
+    const newConst=()=>{ const u=new Set(allConsts()); return CPOOL.find(c=>!u.has(c)&&c!=='u'); };
+    const wpre=w=>w?w+' ':'';
+    const mk=(kind,w,f,just)=>{
+      const d=render(f), t=plain(f);
+      if(kind==='asm') return {kind,world:'',f,disp:'asm: '+d,typed:t,just:just||''};
+      return {kind,world:w,f,disp:wpre(w)+SYM.therefore+' '+d,typed:t,just};
+    };
+    const push=(kind,w,f,just)=>{ used.add(w); lines.push({w,f,asm:kind==='asm',blocked:false}); steps.push(mk(kind,w,f,just)); return lines.length-1; };
+    const no=i=>i+1;
+    if(!init){ push('asm','',neg(concl),''); }
+    else if(!lines.some(L=>!L.blocked&&L.asm)) return {valid:true,steps};
+    // remember earlier weak drops when re-planning from a page
+    if(init){ lines.forEach((L,i)=>{ if(L.blocked) return; const f=L.f;
+      if(['dia','R','ex'].includes(f.op)||(f.op==='~'&&f.a.op==='bel'&&f.a.imp)){
+        // treat as dropped if an instance exists anywhere
+        const inst = f.op==='~' ? neg(f.a.a) : f.a;
+        if(f.op==='ex'){ if(lines.some(M=>!M.blocked&&M.w===L.w&&allConsts().some(c=>eq(M.f,subst(f.a,f.v,c))))) dropped.add(i); }
+        else if(lines.some(M=>!M.blocked&&M.w!==L.w&&eq(M.f,inst))) dropped.add(i);
+      } }); }
+    const worlds=()=>[...new Set(lines.filter(L=>!L.blocked).map(L=>L.w).concat(['']))];
+    const tryRefute=()=>{
+      const model=readModel(lines.filter(L=>!L.blocked));
+      if(!model) return null;
+      model.bad=false;
+      if(!prems.every(p=>evalW(p,'',model)) || evalW(concl,'',model) || model.bad) return null;
+      steps.push(psRef(refHtml(model.txt,'These worlds make the premises true and the conclusion false.')));
+      return {valid:false,steps,model};
+    };
+    const giveUp=()=>tryRefute();
+    const children=(w,letter)=>worlds().filter(x=>x!==w&&parentOf(x)===w&&kindOf(x)===letter);
+    const related=(a,b)=>a!==b&&indBase(a)===indBase(b);
+    let guard=0;
+    while(guard++<CAP){
+      const lv=live();
+      /* RAA: a contradiction in one world (or between related deontic worlds on an indicative) */
+      let pair=null;
+      outer: for(let a=0;a<lv.length;a++) for(let b=a+1;b<lv.length;b++){
+        const A=lv[a], B=lv[b];
+        if(!contra(A.L.f,B.L.f)) continue;
+        if(A.L.w===B.L.w){ pair=[A.i,B.i]; break outer; }
+        if(related(A.L.w,B.L.w)&&!isImp(A.L.f)&&!isImp(B.L.f)&&!pair){ pair=['IT',A.i,B.i]; }
+      }
+      if(pair&&pair[0]==='IT'){
+        const [_,i,j]=pair; const k=push('derive',lines[j].w,lines[i].f,`{from ${no(i)} — indicative transfer}`);
+        pair=[k,j];
+      }
+      if(pair){
+        let ai=-1; for(let i=lines.length-1;i>=0;i--) if(!lines[i].blocked&&lines[i].asm){ ai=i; break; }
+        const der=neg(lines[ai].f), aw=lines[ai].w;
+        for(let i=ai;i<lines.length;i++) lines[i].blocked=true;
+        push('raa',aw,der,`{from ${no(ai)}; ${no(Math.min(pair[0],pair[1]))} contradicts ${no(Math.max(pair[0],pair[1]))}}`);
+        if(!lines.some(L=>!L.blocked&&L.asm)) return {valid:true,steps};
+        continue;
+      }
+      let did=false;
+      /* S-rules and reverse squiggles */
+      for(const {L,i} of lv){
+        const f=L.f, w=L.w; let prods=null, mark='';
+        if(f.op==='&') prods=[f.a,f.b];
+        else if(f.op==='=') prods=[Bn('>',f.a,f.b),Bn('>',f.b,f.a)];
+        else if(f.op==='~'){ const g=f.a;
+          if(g.op==='~') prods=[g.a];
+          else if(g.op==='|') prods=[neg(g.a),neg(g.b)];
+          else if(g.op==='>') prods=[g.a,neg(g.b)];
+          else if(g.op==='=') prods=[Bn('|',g.a,g.b),Ng(Bn('&',g.a,g.b))];
+          else if(g.op==='box'){ prods=[Dia(neg(g.a))]; mark=' — reverse squiggle'; }
+          else if(g.op==='dia'){ prods=[Box(neg(g.a))]; mark=' — reverse squiggle'; }
+          else if(g.op==='O'){ prods=[Pm(neg(g.a))]; mark=' — reverse squiggle'; }
+          else if(g.op==='R'){ prods=[Ob(neg(g.a))]; mark=' — reverse squiggle'; }
+          else if(g.op==='all'){ prods=[Ex(g.v,neg(g.a))]; mark=' — reverse squiggle'; }
+          else if(g.op==='ex'){ prods=[All(g.v,neg(g.a))]; mark=' — reverse squiggle'; }
+        }
+        if(prods){ const fresh=prods.filter(p=>!liveHas(w,p));
+          if(fresh.length){ fresh.forEach(p=>push('derive',w,p,`{from ${no(i)}${mark}}`)); did=true; break; } }
+      }
+      if(did) continue;
+      /* I-rules (partner from the same world, or an indicative from a related deontic world via IT) */
+      for(const {L,i} of live()){
+        if(did) break;
+        const f=L.f, w=L.w;
+        const wants=[];   // [partner, product]
+        if(f.op==='~'&&f.a.op==='&'){ wants.push([f.a.a,neg(f.a.b)],[f.a.b,neg(f.a.a)]); }
+        else if(f.op==='|'){ wants.push([neg(f.a),f.b],[neg(f.b),f.a]); }
+        else if(f.op==='>'){ wants.push([f.a,f.b],[neg(f.b),neg(f.a)]); }
+        for(const [pt,prod] of wants){
+          if(liveHas(w,prod)) continue;
+          let j=lines.findIndex((M,jj)=>!M.blocked&&jj!==i&&M.w===w&&eq(M.f,pt));
+          if(j<0 && !isImp(pt)){
+            const k=lines.findIndex((M,jj)=>!M.blocked&&related(M.w,w)&&eq(M.f,pt));
+            if(k>=0) j=push('derive',w,pt,`{from ${no(k)} — indicative transfer}`);
+          }
+          if(j>=0){ push('derive',w,prod,`{from ${no(i)} and ${no(j)}}`); did=true; break; }
+        }
+      }
+      if(did) continue;
+      /* drop weak operators: ◇ (new W world), R (new D world), B− (new belief world), ∃ (new constant) */
+      if(dropped.size){ const r=tryRefute(); if(r) return r; }      // already a verified model: stop and refute
+      for(const {L,i} of live()){
+        if(did) break;
+        if(dropped.has(i)) continue;
+        const f=L.f, w=L.w;
+        if(f.op==='dia'){
+          if(worlds().length>=MAXW) return giveUp();
+          const nw=wName(used); dropped.add(i); push('derive',nw,f.a,`{from ${no(i)} — drop diamond, new world}`); did=true;
+        } else if(f.op==='R'){
+          const nw=childName(used,w,'D'); if(!nw) return null;
+          if(worlds().length>=MAXW) return giveUp();
+          dropped.add(i); push('derive',nw,f.a,`{from ${no(i)} — drop R, new deontic world}`); did=true;
+        } else if(f.op==='~'&&f.a.op==='bel'&&f.a.imp&&beliefOk(w)){
+          const nw=childName(used,w,f.a.ag); if(!nw) return null;
+          if(worlds().length>=MAXW) return giveUp();
+          dropped.add(i); push('derive',nw,neg(f.a.a),`{from ${no(i)} — B−, new belief world}`); did=true;
+        } else if(f.op==='ex'){
+          if(allConsts().length>=MAXC) return giveUp();
+          const c=newConst(); if(!c) return null;
+          dropped.add(i); push('derive',w,subst(f.a,f.v,c),`{from ${no(i)} — drop existential, new constant ${c}}`); did=true;
+        }
+      }
+      if(did) continue;
+      /* drop strong operators: u: (B+) and O first, then ☐, then ∀ */
+      for(const {L,i} of live()){
+        if(did) break;
+        const f=L.f, w=L.w;
+        if(f.op==='bel'&&f.imp&&beliefOk(w)){
+          let ts=children(w,f.ag);
+          if(!ts.length){ const nw=childName(used,w,f.ag); if(!nw) return null; ts=[nw]; }
+          for(const t of ts) if(!liveHas(t,f.a)){ push('derive',t,f.a,`{from ${no(i)} — B+}`); did=true; break; }
+        } else if(f.op==='O'){
+          let ts=children(w,'D'); if(!ts.length) ts=[w];
+          for(const t of ts) if(!liveHas(t,f.a)){ push('derive',t,f.a,`{from ${no(i)} — drop O}`); did=true; break; }
+        }
+      }
+      if(did) continue;
+      for(const {L,i} of live()){
+        if(did) break;
+        const f=L.f;
+        if(f.op==='box'){
+          for(const t of worlds()) if(!liveHas(t,f.a)){ push('derive',t,f.a,`{from ${no(i)} — drop box}`); did=true; break; }
+        }
+      }
+      if(did) continue;
+      for(const {L,i} of live()){
+        if(did) break;
+        const f=L.f, w=L.w;
+        if(f.op==='all'){
+          let cs=allConsts(); if(!cs.length){ const c=newConst(); cs=[c]; }
+          for(const c of cs){ const g=subst(f.a,f.v,c); if(!liveHas(w,g)){ push('derive',w,g,`{from ${no(i)} — drop universal}`); did=true; break; } }
+        }
+      }
+      if(did) continue;
+      /* Kant's Law: OA ⊃ ◇A, when modal operators are in play */
+      if(lines.some(L=>has(L.f,['box','dia']))){
+        for(const {L,i} of live()){
+          if(did) break;
+          const f=L.f, w=L.w;
+          if(f.op==='O'&&impOnly(f.a)){ const g=Dia(deU(f.a)); if(!liveHas(w,g)){ push('derive',w,g,`{from ${no(i)} — Kant's Law}`); did=true; } }
+        }
+        if(did) continue;
+      }
+      /* Hare's Law: an "ought" also holds in its own world (rule DO allows a blank prefix) */
+      for(const {L,i} of live()){
+        if(did) break;
+        if(L.f.op==='O'&&!liveHas(L.w,L.f.a)){ push('derive',L.w,L.f.a,`{from ${no(i)} — drop O}`); did=true; }
+      }
+      if(did) continue;
+      /* break a complex wff with a further assumption (actual world only) */
+      let broke=false, stuckElsewhere=false;
+      for(const {L,i} of live()){
+        const f=L.f; let sides=null, asmF=null;
+        if(f.op==='|'){ sides=[f.a,f.b]; asmF=f.a; }
+        else if(f.op==='>'){ sides=[f.a,f.b]; asmF=neg(f.a); }
+        else if(f.op==='~'&&f.a.op==='&'){ sides=[f.a.a,f.a.b]; asmF=f.a.a; }
+        if(!sides) continue;
+        if(sides.some(s=>liveHas(L.w,s)||liveHas(L.w,neg(s)))) continue;
+        if(L.w!==''){ stuckElsewhere=true; continue; }
+        push('asm','',asmF,`{break ${no(i)}}`); broke=true; break;
+      }
+      if(broke) continue;
+      if(stuckElsewhere) return null;
+      /* REFUTE — read a model off the open worlds and check it */
+      return tryRefute();
+    }
+    return giveUp();
+  }
+  /* ---------------- semantics (for checking refutations) ---------------- */
+  function readModel(ls){
+    const ws=[...new Set(ls.map(L=>L.w).concat(['']))];
+    const dom=new Set(); ls.forEach(L=>consts(L.f,dom)); if(!dom.size) dom.add('a');
+    const val={}; ws.forEach(w=>val[w]={});
+    const shown={}; ws.forEach(w=>shown[w]=[]);
+    for(const L of ls){
+      if(!isSimple(L.f)) continue;
+      const pos=L.f.op!=='~', at=pos?L.f:L.f.a;
+      const home = isImp(at) ? L.w : indBase(L.w);
+      const k=key(at);
+      if(val[home]===undefined) val[home]={};
+      if(val[home][k]!==undefined && val[home][k]!==pos) return null;
+      val[home][k]=pos;
+      const s=(pos?'':SYM.not)+render(at);
+      if(!shown[L.w].includes(s)) shown[L.w].push(s);
+    }
+    const txt=ws.filter(w=>shown[w].length).map(w=>`<b>${w||'actual'}:</b> ${shown[w].join(', ')}`).join(' &nbsp;&nbsp; ')||'(no simple wffs)';
+    return {ws, dom:[...dom], val, txt, bad:false};
+  }
+  function evalW(f,w,m){
+    const look=(at)=>{ const home=isImp(at)?w:indBase(w); const v=(m.val[home]||{})[key(at)]; return !!v; };
+    const kids=(letter)=>m.ws.filter(x=>x!==w&&parentOf(x)===w&&kindOf(x)===letter);
+    switch(f.op){
+      case 'atom': case 'pred': return look(f);
+      case 'bel':
+        if(!f.imp) return look(f);
+        { const ks=kids(f.ag); if(!ks.length){ m.bad=true; return true; } return ks.every(x=>evalW(f.a,x,m)); }
+      case '~': return !evalW(f.a,w,m);
+      case '&': return evalW(f.a,w,m)&&evalW(f.b,w,m);
+      case '|': return evalW(f.a,w,m)||evalW(f.b,w,m);
+      case '>': return !evalW(f.a,w,m)||evalW(f.b,w,m);
+      case '=': return evalW(f.a,w,m)===evalW(f.b,w,m);
+      case 'all': return m.dom.every(c=>evalW(subst(f.a,f.v,c),w,m));
+      case 'ex': return m.dom.some(c=>evalW(subst(f.a,f.v,c),w,m));
+      case 'box': return m.ws.every(x=>evalW(f.a,x,m));
+      case 'dia': return m.ws.some(x=>evalW(f.a,x,m));
+      case 'O': { const r=[w].concat(kids('D')).every(x=>evalW(f.a,x,m));
+        if(r&&impOnly(f.a)&&!m.ws.some(x=>evalW(deU(f.a),x,m))) m.bad=true;    // Kant's Law must hold in the model
+        return r; }
+      case 'R': return [w].concat(kids('D')).some(x=>evalW(f.a,x,m));
+    }
+    return false;
+  }
+  /* ---------------- legal next lines (for the proof player) ---------------- */
+  function candidates(pl){
+    const out=[];
+    const lv=pl.map((L,i)=>({L,i})).filter(x=>!x.L.blocked&&x.L.f);
+    const usedW=new Set(pl.map(L=>L.w||'')); usedW.add('');
+    const ws=[...new Set(lv.map(x=>x.L.w||'').concat(['']))];
+    const liveHas=(w,f)=>lv.some(x=>(x.L.w||'')===w&&eq(x.L.f,f));
+    const add=(kind,w,f,just)=>{ if(kind!=='raa'&&kind!=='asm'&&liveHas(w,f)) return; out.push({kind,w,f,just}); };
+    const cs=new Set(); pl.forEach(L=>{ if(L.f) consts(L.f,cs); });
+    const fresh=CPOOL.filter(c=>!cs.has(c));
+    const freshNames=(base,letter)=>{ if(kindOf(base)===letter) return []; const r=[]; for(let k=1;k<=4;k++){ const n=base+letter.repeat(k); if(!usedW.has(n)) r.push(n); } return r; };
+    const related=(a,b)=>a!==b&&indBase(a)===indBase(b);
+    for(const {L,i} of lv){
+      const f=L.f, w=L.w||''; let prods=[], mark='';
+      if(f.op==='&') prods=[f.a,f.b];
+      else if(f.op==='=') prods=[Bn('>',f.a,f.b),Bn('>',f.b,f.a)];
+      else if(f.op==='~'){ const g=f.a;
+        if(g.op==='~') prods=[g.a]; else if(g.op==='|') prods=[neg(g.a),neg(g.b)]; else if(g.op==='>') prods=[g.a,neg(g.b)];
+        else if(g.op==='=') prods=[Bn('|',g.a,g.b),Ng(Bn('&',g.a,g.b))];
+        else { mark=' — reverse squiggle';
+          if(g.op==='box') prods=[Dia(neg(g.a))]; else if(g.op==='dia') prods=[Box(neg(g.a))];
+          else if(g.op==='O') prods=[Pm(neg(g.a))]; else if(g.op==='R') prods=[Ob(neg(g.a))];
+          else if(g.op==='all') prods=[Ex(g.v,neg(g.a))]; else if(g.op==='ex') prods=[All(g.v,neg(g.a))];
+          else if(g.op==='bel'&&g.imp&&beliefOk(w)) { mark=''; freshNames(w,g.ag).forEach(n=>add('derive',n,neg(g.a),`{from ${i+1} — B−, new belief world}`)); }
+        } }
+      prods.forEach(q=>add('derive',w,q,`{from ${i+1}${mark}}`));
+      // I-rules
+      for(const {L:M,i:j} of lv){ if(j===i||(M.w||'')!==w) continue; const g=M.f, J=`{from ${i+1} and ${j+1}}`;
+        if(f.op==='~'&&f.a.op==='&'){ if(eq(g,f.a.a)) add('derive',w,neg(f.a.b),J); if(eq(g,f.a.b)) add('derive',w,neg(f.a.a),J); }
+        else if(f.op==='|'){ if(eq(g,neg(f.a))) add('derive',w,f.b,J); if(eq(g,neg(f.b))) add('derive',w,f.a,J); }
+        else if(f.op==='>'){ if(eq(g,f.a)) add('derive',w,f.b,J); if(eq(g,neg(f.b))) add('derive',w,neg(f.a),J); } }
+      // IT: indicatives between a deontic world and its base (and sibling deontic worlds)
+      if(!isImp(f)) ws.forEach(t=>{ if(related(w,t)) add('derive',t,f,`{from ${i+1} — indicative transfer}`); });
+      // weak drops
+      if(f.op==='dia'){ let k=1; while(usedW.has('W'.repeat(k))) k++; add('derive','W'.repeat(k),f.a,`{from ${i+1} — drop diamond, new world}`); }
+      if(f.op==='R') freshNames(w,'D').forEach(n=>add('derive',n,f.a,`{from ${i+1} — drop R, new deontic world}`));
+      if(f.op==='ex') fresh.forEach(c=>add('derive',w,subst(f.a,f.v,c),`{from ${i+1} — drop existential, new constant ${c}}`));
+      // strong drops
+      if(f.op==='box') ws.forEach(t=>add('derive',t,f.a,`{from ${i+1} — drop box}`));
+      if(f.op==='O'){ const ds=ws.filter(t=>t!==w&&parentOf(t)===w&&kindOf(t)==='D'); [w].concat(ds,freshNames(w,'D').slice(0,1)).forEach(t=>add('derive',t,f.a,`{from ${i+1} — drop O}`)); }
+      if(f.op==='bel'&&f.imp&&beliefOk(w)){ const bs=ws.filter(t=>t!==w&&parentOf(t)===w&&kindOf(t)===f.ag); bs.concat(freshNames(w,f.ag).slice(0,1)).forEach(t=>add('derive',t,f.a,`{from ${i+1} — B+}`)); }
+      if(f.op==='all'){ (cs.size?[...cs]:fresh.slice(0,1)).forEach(c=>add('derive',w,subst(f.a,f.v,c),`{from ${i+1} — drop universal}`)); }
+      if(f.op==='O'&&impOnly(f.a)) add('derive',w,Dia(deU(f.a)),`{from ${i+1} — Kant's Law}`);
+      // assumptions (actual world)
+      if(!w){ let sides=null;
+        if(f.op==='|'||f.op==='>') sides=[f.a,f.b]; else if(f.op==='~'&&f.a.op==='&') sides=[f.a.a,f.a.b];
+        if(sides&&!sides.some(x=>liveHas('',x)||liveHas('',neg(x)))) sides.forEach(x=>{ add('asm','',x,`{break ${i+1}}`); add('asm','',neg(x),`{break ${i+1}}`); }); }
+    }
+    // RAA
+    let ai=-1; for(let i=pl.length-1;i>=0;i--) if(!pl[i].blocked&&pl[i].asm){ ai=i; break; }
+    if(ai>=0&&pl[ai].f){
+      for(let a=0;a<lv.length;a++) for(let b=a+1;b<lv.length;b++){
+        const A=lv[a], B=lv[b]; if((A.L.w||'')!==(B.L.w||'')||!contra(A.L.f,B.L.f)) continue;
+        add('raa',pl[ai].w||'',neg(pl[ai].f),`{from ${ai+1}; ${A.i+1} contradicts ${B.i+1}}`); a=lv.length; break;
+      }
+    }
+    return out;
+  }
+  /* ---------------- quality filters shared by the generators ---------------- */
+  const FALSUM=Bn('&',At('Z'),Ng(At('Z')));
+  function make(prems, concl, opt){
+    opt=opt||{};
+    const ks=prems.map(key);
+    if(new Set(ks).size!==ks.length) return null;
+    if(ks.includes(key(concl))) return null;
+    const twin=f=>!!f&&typeof f==='object'&&((f.a&&f.b&&typeof f.a==='object'&&eq(f.a,f.b))||twin(f.a)||twin(f.b));
+    if(prems.concat([concl]).some(twin)) return null;                                     // no "(A ∨ A)" or "(A ⊃ A)" parts
+    const truth=prove(prems,concl,opt.cfg);
+    if(!truth) return null;
+    if(opt.want!==undefined && truth.valid!==opt.want) return null;
+    const n=truth.steps.length;
+    const lo=opt.min||3, hi=opt.max||14;
+    if(n<lo||n>hi) return null;
+    if(prems.length){
+      const inc=prove(prems,FALSUM,opt.cfg); if(!inc||inc.valid) return null;          // inconsistent premises
+      const alone=prove([],concl,opt.cfg); if(alone&&alone.valid) return null;          // conclusion provable by itself
+      if(truth.valid){                                                                   // every premise used
+        const usedN=new Set(); truth.steps.forEach(st=>{ (st.just||'').replace(/\d+/g,d=>{ usedN.add(+d); return d; }); });
+        for(let i=1;i<=prems.length;i++) if(!usedN.has(i)) return null;
+      }
+    } else {
+      const negc=prove([],neg(concl),opt.cfg); if(negc&&negc.valid) return null;        // self-contradictory "norm"
+      if(!truth.valid && Math.random()<0.7) return null;                                  // mostly theorems when there are no premises
+    }
+    return {prem:prems.map(render), premAst:prems, concl:render(concl), valid:truth.valid, steps:truth.steps,
+            eng:{name:'world', prems, concl, cfg:opt.cfg||{}}};
+  }
+  return {At,Pr,Ng,Bn,Box,Dia,Ob,Pm,Bel,All,Ex,key,eq,neg,render,plain,isImp,prove,candidates,make,readModel,evalW};
+})();
+
+/* ============================================================================
+   GENERATORS built on the world engine (Sets K-quantified, M, O), galactic
+   travel (Set K), random quantificational arguments (Set I) and random Copi
+   derivations (Set G). Every item is checked before it is shown: valid ones
+   come with a full proof, invalid ones with a checked refutation.
+   ========================================================================== */
+const WG_LET=['A','B','C','E','F','G','H','J','K','L','M','N','P','Q','S','T'];
+function wgTry(build, opt, tries){
+  for(let t=0;t<(tries||400);t++){
+    const c=build(); if(!c) continue;
+    const s=WE.make(c.prem, c.concl, opt);
+    if(s) return s;
+  }
+  return null;
+}
+/* ---- Set M: deontic proofs (O, R, imperatives, ☐, Kant's and Hare's Laws) ---- */
+function genDeonticArg(want){
+  const {At,Ng,Bn,Ob,Pm,Box,Dia,All,Pr}=WE;
+  return wgTry(()=>{
+    const [p,q,r]=sampleDistinct(WG_LET,3);
+    const ip=[p,q], ind=r;
+    const sg=f=>Math.random()<0.35?Ng(f):f;
+    const iLit=()=>sg(At(pick(ip),true));
+    const dLit=()=>sg(At(ind,false));
+    const op=()=>pick(['&','|','>']);
+    const core=()=>{ const x=Math.random();
+      if(x<0.45) return iLit();
+      if(x<0.75) return Bn(op(),iLit(),iLit());
+      return Bn('>',dLit(),iLit()); };
+    const deon=()=>{ const x=Math.random(), c=core();
+      if(x<0.38) return Ob(c); if(x<0.66) return Pm(c); if(x<0.84) return Ng(Ob(c)); return Ng(Pm(c)); };
+    const prem=()=>{ const x=Math.random();
+      if(x<0.62) return deon();
+      if(x<0.72) return Bn('>',dLit(),deon());
+      if(x<0.78) return Bn(pick(['>','|']),deon(),deon());
+      if(x<0.86) return dLit();
+      if(x<0.92) return Box(Bn('>',At(p,false),At(ind,false)));
+      return iLit(); };
+    // a fifth of the items use quantifiers, as in Gensler's "O(x)(Tx ⊃ Px)" examples
+    if(Math.random()<0.2){
+      const F=p, G=q, c=pick(['u','a']);
+      const shapes=[
+        ()=>({prem:[Ob(All('x',Bn('>',Pr(F,['x']),Pr(G,['x'],true)))), Pr(F,[c])], concl:Ob(Pr(G,[c],true))}),
+        ()=>({prem:[All('x',Bn('>',Pr(F,['x']),Ob(Pr(G,['x'],true)))), Pr(F,[c])], concl:Ob(Pr(G,[c],true))}),
+        ()=>({prem:[Ob(All('x',Bn('>',Pr(F,['x']),Pr(G,['x'],true))))], concl:Bn('>',Pr(F,[c]),Ob(Pr(G,[c],true)))}),
+        ()=>({prem:[Pm(All('x',Pr(G,['x'],true)))], concl:All('x',Pm(Pr(G,['x'],true)))}),
+        ()=>({prem:[All('x',Pm(Pr(G,['x'],true)))], concl:Pm(All('x',Pr(G,['x'],true)))}),
+        ()=>({prem:[Ob(Pr(G,[c],true))], concl:Pm(Pr(G,[c],true))}),
+        ()=>({prem:[Bn('>',Pr(F,[c]),Ob(Pr(G,[c],true))), Ng(Ob(Pr(G,[c],true)))], concl:Ng(Pr(F,[c]))}),
+        ()=>({prem:[Ob(Bn('>',Pr(F,[c]),Pr(G,[c],true))), Pr(F,[c])], concl:Ob(Pr(G,[c],true))}),
+      ];
+      return pick(shapes)();
+    }
+    const np = Math.random()<0.12 ? 0 : 1+(Math.random()<0.6?1:0)+(Math.random()<0.2?1:0);
+    const ps=[]; for(let i=0;i<np;i++) ps.push(prem());
+    let concl; const x=Math.random();
+    if(np===0) concl = pick([
+      ()=>Ng(Bn('&',Ob(iLit()),Ob(Ng(At(p,true))))), ()=>Bn('|',Pm(At(p,true)),Pm(Ng(At(p,true)))),
+      ()=>Bn('>',Ob(core()),Pm(core())), ()=>Bn('>',Ob(core()),core()), ()=>Ng(Bn('&',Ob(core()),Pm(core()))),
+      ()=>Ob(Bn('|',At(p,true),Ng(At(p,true)))), ()=>Bn('>',Box(At(ind,false)),Ob(core())) ])();
+    else if(x<0.72) concl=deon();
+    else if(x<0.82) concl=iLit();
+    else if(x<0.92) concl=Bn(pick(['>','|','&']),deon(),deon());
+    else concl=Dia(At(ind,false));
+    return {prem:ps, concl};
+  }, {want, min:3, max:14, cfg:{maxConsts:3}});
+}
+/* ---- Set O: belief, willing and rationality proofs ---- */
+function genBeliefArg(mode, want){
+  const {At,Ng,Bn,Ob,Pm,Bel,Box,Dia,All,Ex,Pr}=WE;
+  return wgTry(()=>{
+    const [p,q,r]=sampleDistinct(WG_LET,3);
+    const sg=f=>Math.random()<0.35?Ng(f):f;
+    const op=()=>pick(['&','|','>']);
+    const will = mode==='will';
+    // contents: indicative for believing; imperatives (underlined) for willing
+    const lit=()=>{
+      if(will){ const y=Math.random();
+        if(y<0.35) return sg(At(pick([p,q]),true));
+        if(y<0.6)  return sg(Pr(pick([p,q]),['u'],true));
+        if(y<0.75) return sg(At(r,false));
+        if(y<0.88) return Ob(sg(Pr(pick([p,q]),['u'],true)));
+        return Pm(sg(Pr(pick([p,q]),['u'],true))); }
+      return sg(At(pick([p,q,r]),false)); };
+    const quant=()=>{ const F=pick([p,q]), imp=will;
+      const y=Math.random(), m=sg(Pr(F,['x'],imp));
+      if(y<0.3) return All('x',m); if(y<0.6) return Ex('x',m); if(y<0.8) return Ng(Ex('x',Pr(F,['x'],imp))); return sg(Pr(F,[pick(['a','b'])],imp)); };
+    const content=()=>{ const y=Math.random();
+      if(y<0.4) return lit(); if(y<0.8) return Bn(op(),lit(),lit()); return quant(); };
+    const bel=(imp)=>{ const b=Bel(content(), imp===undefined?Math.random()<0.88:imp); return Math.random()<0.3?Ng(b):b; };
+    const ratF=()=>{ const y=Math.random(), b=bel(true);
+      if(y<0.3) return Ob(b); if(y<0.6) return Pm(b); if(y<0.75) return Ng(Ob(b)); if(y<0.85) return Ng(Pm(b));
+      return Ob(Ng(Bn('&',bel(true),bel(true)))); };
+    const isRat = mode==='rat';
+    const unit = isRat ? ratF : ()=>bel();
+    const np = Math.random()<(isRat?0.35:0.55) ? 0 : 1+(Math.random()<0.35?1:0);
+    const ps=[];
+    for(let i=0;i<np;i++){ const y=Math.random();
+      if(y<0.3) ps.push(Box(Bn(op(),lit(),lit())));
+      else if(y<0.4) ps.push(Ng(Dia(Bn(op(),lit(),lit()))));
+      else ps.push(unit()); }
+    let concl; const y=Math.random();
+    if(np===0){
+      concl = isRat ? pick([()=>Ob(Ng(Bn('&',bel(true),bel(true)))), ()=>Bn('>',Pm(bel(true)),Dia(content())), ()=>Bn('|',Pm(bel(true)),Pm(bel(true))), ()=>ratF()])()
+            : pick([()=>Ng(Bn('&',bel(),bel())), ()=>Bn('|',bel(),bel()), ()=>Bn('>',bel(),bel()), ()=>Bel(content(),true)])();
+    } else concl = y<0.75 ? unit() : Bn(pick(['>','|']),unit(),unit());
+    return {prem:ps, concl};
+  }, {want, min:3, max:15, cfg:{maxConsts:2, maxWorlds:5}});
+}
+/* ---- Set K: quantified modal proofs ---- */
+function genQModalArg(want){
+  const {Ng,Bn,Box,Dia,All,Ex,Pr}=WE;
+  return wgTry(()=>{
+    const [F,G]=sampleDistinct(['F','G','H','M','N','P','S'],2);
+    const sg=f=>Math.random()<0.3?Ng(f):f;
+    const pl=(v)=>sg(Pr(pick([F,G]),[v]));
+    const mop=f=>Math.random()<0.5?Box(f):Dia(f);
+    const matrix=v=>Math.random()<0.6?pl(v):Bn(pick(['&','|','>']),pl(v),pl(v));
+    const q=f=>Math.random()<0.5?All('x',f):Ex('x',f);
+    const wff=()=>{ const y=Math.random();
+      if(y<0.3) return mop(q(matrix('x')));                 // ☐(x)Fx, ◇(∃x)(Fx · Gx)
+      if(y<0.55) return q(mop(matrix('x')));                // (x)☐Fx, (∃x)◇Fx
+      if(y<0.7) return All('x',Bn('>',pl('x'),mop(pl('x'))));   // (x)(Fx ⊃ ☐Gx)
+      if(y<0.82) return mop(matrix(pick(['a','b'])));       // ☐Fa, ◇(Fa ⊃ Ga)
+      if(y<0.9) return Ng(mop(q(matrix('x'))));
+      return pl(pick(['a','b'])); };
+    const np=1+(Math.random()<0.4?1:0);
+    const ps=[]; for(let i=0;i<np;i++) ps.push(wff());
+    return {prem:ps, concl:wff()};
+  }, {want, min:3, max:14, cfg:{maxConsts:3, maxWorlds:4}});
+}
+/* ---- Set K: galactic travel — validity in T, S4, B and S5 by checking every
+   galaxy of up to four worlds (reflexive travel; S4 adds transitivity, B
+   symmetry, S5 both) ---- */
+const GAL_FRAMES=(()=>{
+  const out=[];
+  for(let n=1;n<=4;n++){
+    const pairs=[]; for(let i=0;i<n;i++) for(let j=0;j<n;j++) if(i!==j) pairs.push([i,j]);
+    for(let m=0;m<(1<<pairs.length);m++){
+      const succ=[]; for(let i=0;i<n;i++) succ.push(1<<i);
+      pairs.forEach(([i,j],k)=>{ if(m>>k&1) succ[i]|=1<<j; });
+      let trans=true, sym=true;
+      for(let i=0;i<n;i++) for(let j=0;j<n;j++) if(succ[i]>>j&1){
+        if(!(succ[j]>>i&1)) sym=false;
+        if((succ[j]&~succ[i])) trans=false; }
+      // keep only frames where every world is reachable from world 0 (others can't matter)
+      let seen=1, grow=true; while(grow){ grow=false; for(let i=0;i<n;i++) if(seen>>i&1){ const nx=seen|succ[i]; if(nx!==seen){ seen=nx; grow=true; } } }
+      if(seen!==(1<<n)-1) continue;
+      out.push({n,succ,sys:{T:true,S4:trans,B:sym,S5:trans&&sym}});
+    }
+  }
+  return out;
+})();
+function galMask(f,fr,val){
+  const full=(1<<fr.n)-1;
+  switch(f.op){
+    case 'var': return val[f.name];
+    case '~': return ~galMask(f.a,fr,val)&full;
+    case '&': return galMask(f.a,fr,val)&galMask(f.b,fr,val);
+    case '|': return galMask(f.a,fr,val)|galMask(f.b,fr,val);
+    case '>': return (~galMask(f.a,fr,val)|galMask(f.b,fr,val))&full;
+    case '#': { const m=galMask(f.a,fr,val); let r=0; for(let w=0;w<fr.n;w++) if((fr.succ[w]&m)===fr.succ[w]) r|=1<<w; return r; }
+    case '$': { const m=galMask(f.a,fr,val); let r=0; for(let w=0;w<fr.n;w++) if(fr.succ[w]&m) r|=1<<w; return r; }
+  }
+  return 0;
+}
+function galCheck(prems,concl,letters){
+  const inv={T:null,S4:null,B:null,S5:null};
+  for(const fr of GAL_FRAMES){
+    const nv=1<<(fr.n*letters.length);
+    for(let v=0;v<nv;v++){
+      const val={}; letters.forEach((L,k)=>{ val[L]=(v>>(k*fr.n))&((1<<fr.n)-1); });
+      if(prems.every(p=>galMask(p,fr,val)&1) && !(galMask(concl,fr,val)&1)){
+        for(const s of ['T','S4','B','S5']) if(fr.sys[s]&&!inv[s]) inv[s]={fr,val};
+      }
+    }
+    if(inv.T&&inv.S4&&inv.B&&inv.S5) break;
+  }
+  return inv;
+}
+function galDepth(f){ if(!f||f.op==='var') return 0; if(f.op==='#'||f.op==='$') return 1+galDepth(f.a); return Math.max(galDepth(f.a),f.b?galDepth(f.b):0); }
+function galOps(f){ if(!f||f.op==='var') return 0; return (f.op==='#'||f.op==='$'?1:0)+galOps(f.a)+(f.b?galOps(f.b):0); }
+function genGalactic(){
+  for(let t=0;t<300;t++){
+    const two=Math.random()<0.3, Ls=two?sampleDistinct(G_LETTERS,2):[pick(G_LETTERS)];
+    const at=()=>{ const v=mkVar(pick(Ls)); return Math.random()<0.25?mkNeg(v):v; };
+    const md=(f)=>{ const y=Math.random(); return y<0.5?BOXf(f):DIAf(f); };
+    const wff=(d)=>{ const y=Math.random();
+      if(d<=0||y<0.25) return at();
+      if(y<0.8) return md(wff(d-1));
+      if(y<0.9) return mkNeg(md(wff(d-1)));
+      return mkBin(pick(['>','&','|']),wff(d-1),wff(d-1)); };
+    const np=Math.random()<0.15?0:(two&&Math.random()<0.4?2:1);
+    const prems=[]; for(let i=0;i<np;i++) prems.push(wff(2));
+    const concl=wff(2);
+    const all=prems.concat([concl]);
+    if(all.some(f=>galDepth(f)>2)) continue;
+    if(all.reduce((s,f)=>s+galOps(f),0)>3 ||   // ≤3 modal operators: a 4-world galaxy always suffices for a countermodel
+       all.reduce((s,f)=>s+galOps(f),0)<2) continue;
+    if(prems.some(p=>qEq(p,concl))) continue;
+    const sameSides=f=>!f||typeof f!=='object'?false:((f.a&&f.b&&qEq(f.a,f.b))||sameSides(f.a)||sameSides(f.b));
+    if(all.some(sameSides)) continue;                                   // no (A ∨ A)
+    const lets=f=>{ const o=new Set(); const go=g=>{ if(!g) return; if(g.op==='var') o.add(g.name); go(g.a); go(g.b); }; go(f); return o; };
+    const cl=lets(concl); if(prems.some(p=>![...lets(p)].some(x=>cl.has(x)))) continue;   // each premise talks about the conclusion
+    const inv=galCheck(prems,concl,Ls);
+    const validIn=['T','S4','B','S5'].filter(s=>!inv[s]);
+    if(!validIn.length && Math.random()<0.85) continue;                 // mostly arguments valid somewhere
+    if(validIn.length===4 && Math.random()<0.6) continue;              // and mostly ones that tell systems apart
+    if(!galCheck([],concl,Ls).S5 ) continue;                           // conclusion necessary by itself: dull
+    if(np && !galCheck(prems,{op:'&',a:mkVar(Ls[0]),b:mkNeg(mkVar(Ls[0]))},Ls).S5) continue;   // inconsistent premises
+    return {prems,concl,Ls,inv,validIn};
+  }
+  return null;
+}
+function galModelHtml(m,Ls){
+  const name=i=>i===0?'W1':'W'+(i+1);
+  const worlds=[]; for(let w=0;w<m.fr.n;w++) worlds.push(`${name(w)}: ${Ls.map(L=>((m.val[L]>>w)&1?'':SYM.not)+L).join(', ')}`);
+  const tix=[]; for(let i=0;i<m.fr.n;i++) for(let j=0;j<m.fr.n;j++) if(i!==j&&(m.fr.succ[i]>>j&1)) tix.push(`${name(i)} ⇒ ${name(j)}`);
+  return `${worlds.join(' &nbsp;·&nbsp; ')}${tix.length?`<br>Travel tickets: ${tix.join(', ')}`:'<br>No travel tickets between different worlds.'}`;
+}
+/* ---- Set I: random quantificational arguments (the prover decides the verdict) ---- */
+function candRandom(level){
+  const [p,q,r]=threePreds(); const P=[p,q,r];
+  const cs=['a','b','c'];
+  const sg=f=>Math.random()<0.3?NEG(f):f;
+  const at=(t,k)=>sg(PR(P[k===undefined?rand(level==='easier'?2:3):k],t));
+  const bin=(t)=>{ const o=pick(['&','|','>']); const a=at(t,0), b=at(t,1+rand(level==='easier'?1:2));
+    return o==='&'?AND(a,b):o==='|'?ORf(a,b):IMP(a,b); };
+  const qf=()=>{ const m=Math.random()<0.65?bin('x'):at('x'); const Q=Math.random()<0.5?ALL('x',m):EXf('x',m); return Math.random()<0.2?NEG(Q):Q; };
+  const sing=()=>Math.random()<0.6?at(pick(cs.slice(0,2))):bin(pick(cs.slice(0,2)));
+  let wff;
+  if(level==='easier') wff=()=>Math.random()<0.65?qf():sing();
+  else if(level==='harder') wff=()=>{ const y=Math.random();
+      if(y<0.35) return qf();
+      if(y<0.6){ const a=qf(), b=qf(); const o=pick(['>','|','&']); return o==='>'?IMP(a,b):o==='|'?ORf(a,b):AND(a,b); }
+      if(y<0.75){ const m=IMP(at('x',0),AND(at('x',1),at('x',2))); return Math.random()<0.5?ALL('x',m):EXf('x',m); }
+      return sing(); };
+  else if(level==='rel'){ const RL=pick(['L','R','K','S','T']); const L=(x,y)=>PR(RL,x,y);
+    const sw=(x,y)=>Math.random()<0.5?L(x,y):L(y,x);
+    wff=()=>pick([
+      ()=>ALL('x',IMP(PR(p,'x'),EXf('y',sw('x','y')))), ()=>EXf('x',AND(PR(p,'x'),ALL('y',sw('x','y')))),
+      ()=>ALL('x',ALL('y',IMP(AND(PR(p,'x'),PR(q,'y')),sw('x','y')))), ()=>NEG(ALL('x',EXf('y',sw('x','y')))),
+      ()=>ALL('x',IMP(sw('x',pick(cs)),sg(PR(q,'x')))), ()=>EXf('x',AND(sg(PR(q,'x')),sw('x',pick(cs)))),
+      ()=>ALL('x',ALL('y',ALL('z',IMP(AND(L('x','y'),L('y','z')),L('x','z'))))),
+      ()=>ALL('x',ALL('y',sg(L('x','y')))), ()=>ALL('x',EXf('y',L('x','y'))), ()=>EXf('x',ALL('y',L('x','y'))),
+      ()=>EXf('x',EXf('y',L('x','y'))), ()=>ALL('x',sg(L('x',pick(cs)))), ()=>EXf('x',sg(L(pick(cs),'x'))),
+      ()=>sg(L(pick(cs),pick(cs))), ()=>ALL('x',sg(L('x','x'))), ()=>ALL('x',ALL('y',IMP(L('x','y'),L('y','x')))),
+      ()=>ALL('x',IMP(PR(p,'x'),L('x',pick(cs)))), ()=>sg(PR(p,pick(cs))), ()=>NEG(EXf('x',L('x',pick(cs))))])(); }
+  else { // identity
+    wff=()=>pick([()=>IDf(pick(cs),pick(cs)), ()=>NEG(IDf('a','b')), ()=>sg(PR(p,pick(cs))), ()=>sg(PR(q,pick(cs))),
+      ()=>EXf('x',AND(PR(p,'x'),IDf('x',pick(cs)))), ()=>ALL('x',IMP(PR(p,'x'),IDf('x',pick(cs)))),
+      ()=>ALL('x',IMP(PR(p,'x'),PR(q,'x'))), ()=>EXf('x',PR(p,'x'))])(); }
+  const np = level==='harder' ? 1+rand(3) : 1+(Math.random()<0.6?1:0);
+  const prem=[]; for(let i=0;i<np;i++) prem.push(wff());
+  return {prem, concl:wff()};
+}
+/* ---- Set G: random Copi derivations (each step built forward and checked by the Copi rule checker) ---- */
+function genCopiRandom(level){
+  for(let t=0;t<200;t++){
+    const Ls=sampleDistinct(['A','B','C','D','E','G','H','K','M','N'],6);
+    let li=0; const fresh=()=>mkVar(Ls[(li++)%Ls.length]);
+    const prems=[], steps=[];
+    const P=f=>{ prems.push(f); return {t:'p',i:prems.length-1}; };
+    const start=pick([()=>fresh(), ()=>mkBin('&',fresh(),fresh()), ()=>mkBin('|',fresh(),fresh()), ()=>mkNeg(fresh()), ()=>mkBin('>',fresh(),fresh())])();
+    let curRef=P(start), cur=start;
+    const nSteps = level==='easier' ? 1 : 2+rand(3);
+    let ok=true;
+    for(let s=0;s<nSteps;s++){
+      const opts=['MP','Conj'];
+      if(cur.op==='~'&&cur.a.op==='var') opts.push('MT','DS');
+      if(cur.op==='>') opts.push('HS','Trans','Impl');
+      if(cur.op==='&') opts.push('Simp','Comm');
+      if(cur.op==='|') opts.push('CD','Comm','Impl');
+      if(cur.op==='~'&&(cur.a.op==='&'||cur.a.op==='|')) opts.push('DeM');
+      if(s===nSteps-1) opts.push('Add');
+      const rule=pick(opts);
+      let res=null, from=[];
+      if(rule==='MP'){ const y=fresh(); from=[P(mkBin('>',cur,y)),curRef]; res=y; }
+      else if(rule==='Conj'){ const y=fresh(); from=[curRef,P(y)]; res=mkBin('&',cur,y); }
+      else if(rule==='MT'){ const x=fresh(); from=[P(mkBin('>',x,cur.a)),curRef]; res=mkNeg(x); }
+      else if(rule==='DS'){ const y=fresh(); from=[P(mkBin('|',cur.a,y)),curRef]; res=y; }
+      else if(rule==='HS'){ const z=fresh(); from=[curRef,P(mkBin('>',cur.b,z))]; res=mkBin('>',cur.a,z); }
+      else if(rule==='CD'){ const y=fresh(), z=fresh(); from=[P(mkBin('&',mkBin('>',cur.a,y),mkBin('>',cur.b,z))),curRef]; res=mkBin('|',y,z); }
+      else if(rule==='Simp'){ res=cur.a; from=[curRef]; }
+      else if(rule==='Add'){ res=mkBin('|',cur,fresh()); from=[curRef]; }
+      else { const rw=copiRewrites(cur,rule).filter(x=>!(x.op==='~'&&x.a.op==='~')&&!astEq(x,cur)); if(!rw.length){ ok=false; break; } res=pick(rw); from=[curRef]; }
+      const get=r=>r.t==='p'?prems[r.i]:steps[r.i].f;
+      if(!copiStepOk(res,rule,from.map(get))){ ok=false; break; }
+      steps.push({f:res, rule, from});
+      curRef={t:'s',i:steps.length-1}; cur=res;
+    }
+    if(!ok||!steps.length) continue;
+    if(prems.some(p=>astEq(p,cur))) continue;
+    if(new Set(prems.map(astStr)).size!==prems.length) continue;
+    const num=r=>r.t==='p'?r.i+1:prems.length+r.i+1;
+    return { prem:prems, concl:cur,
+      sample: steps.map((st,i)=>({w:astRender(st.f), rule:st.rule, from:st.from.map(num)})) };
+  }
+  return null;
+}
+
 /* ---- quantified modal proofs (medium register; no difficulty label) ---- */
 function kQuant(){
   const N=SYM.not, IMPs=SYM.horseshoe, ANDs=SYM.and, DI=SYM.diamond, BX=SYM.box;
@@ -6229,7 +7029,7 @@ function kQuant(){
       psRef(refHtml(`W: ${F}a, ${N}${G}a &nbsp;&nbsp; WW: ${G}a, ${N}${F}a`,
         `Each conjunct is possible — but in different worlds, so the conjunction needn't be possible anywhere.`))]}),
   ];
-  const s=pick(bank)();
+  const s=(Math.random()<0.8&&genQModalArg(Math.random()<0.5))||pick(bank)();
   const selfStar=state.gStars==='self';
   return proofPlayer({
     setLine:`Set K — Quantified Modal Proofs${state.gTrain?' (training wheels)':''}`,
@@ -6492,7 +7292,7 @@ function makeM(){
       psDer('D',`A`,`A`,'{from 5 — drop O}'),
       psRaa('',`(RA ${OR} R${N}A)`,`(RAvR~A)`,'{from 1; 6 contradicts 7}')]}),
   ];
-  const s=pick(bank)();
+  const s=(Math.random()<0.8&&genDeonticArg(Math.random()<0.5))||pick(bank)();
   const selfStar=state.gStars==='self';
   return proofPlayer({
     setLine:`Set M — Deontic Proofs${state.gTrain?' (training wheels)':''}`,
@@ -6500,7 +7300,7 @@ function makeM(){
     prompt: s.prem.length ? 'Say whether valid (and give the proof) or invalid (and refute it).'
                           : 'Prove this deontic theorem — or refute it.',
     stars:selfStar?'self':'auto', train:!!state.gTrain,
-    instr:`Deontic worlds ("D", "DD", …) are ideal alternatives where all obligations are met. Reverse squiggles (${SYM.not}O ⇒ R${SYM.not}, ${SYM.not}R ⇒ O${SYM.not}); drop R into a NEW deontic world; drop O into each deontic world. Kant's Law: from O comes ${SYM.diamond}. In typed mode, prefix deontic lines "D: …".`
+    instr:`Deontic worlds ("D", "DD", …) are ideal alternatives where all obligations are met. Reverse squiggles (${SYM.not}O ⇒ R${SYM.not}, ${SYM.not}R ⇒ O${SYM.not}); drop R into a NEW deontic world; drop O into each OLD deontic world (or, if there is none, into the world it's in). Underlined letters are imperatives. Indicative transfer: plain (non-underlined) wffs move between a deontic world and the world it depends on. Kant's Law: from O comes ${SYM.diamond} (with the underlining removed). In typed mode, prefix deontic lines "D: …".`
   });
 }
 function genM(){
@@ -6869,13 +7669,14 @@ function makeO(){
   const O_POOLS={believe:ob.believe.concat(bank.slice(0,7)), will:ob.will, rat:ob.rat.concat(bank.slice(7))};
   let om=state.oMode||'believe'; if(!O_POOLS[om]&&om!=='mix') om='believe';
   const pool= om==='mix' ? O_POOLS[pick(['believe','will','rat'])] : O_POOLS[om];
-  const s=pick(pool)();
+  const genMode= om==='mix' ? pick(['believe','will','rat']) : om;
+  const s=(Math.random()<0.8&&genBeliefArg(genMode, Math.random()<0.5))||pick(pool)();
   const selfStar=state.gStars==='self';
   const oLabel={believe:'Believing',will:'Willing',rat:'Rationality',mix:'Mixed'}[om];
   return proofPlayer({
     setLine:`Set O — Belief Proofs (${oLabel})${state.gTrain?' (training wheels)':''}`,
     script:s,
-    prompt:`${s.prem.length?'Say whether valid (and give the proof) or invalid (and refute it). An implicit "be consistent" premise is built into the rules.':'Prove this consistency norm.'}`,
+    prompt:`${s.prem.length?'Say whether valid (and give the proof) or invalid (and refute it). An implicit "be consistent" premise is built into the rules.':'Is this a consistency norm? Prove it — or, if it isn’t one, refute it.'}`,
     stars:selfStar?'self':'auto', train:!!state.gTrain,
     instr:`Belief worlds ("u", "uu", …) contain everything the person is committed to accepting. <b>B−</b>: from "${SYM.not}u:A" derive "u ${SYM.therefore} ${SYM.not}A" in a NEW belief world (star the original). <b>B+</b>: from "u:A" derive "u ${SYM.therefore} A" in any belief world (don't star). Rationality proofs mix worlds: "Du" is the belief world of an ideal deontic world, "DuD" an ideal world of that. In typed mode prefix world lines "u: …", "D: …", "Du: …".${om==='will'||om==='mix'?' <b>Willing:</b> an underlined letter after the colon ("u:A<u>u</u>") is something willed; B+ and B− work the same way.':''}`
   });

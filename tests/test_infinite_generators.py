@@ -145,8 +145,10 @@ with sync_playwright() as pw:
         for trial in range(25):
             r = pg.evaluate("""([sid,key,val])=>{ state[key]=val; state.type=true; state.level=9; startSet(sid);
               const S=window.__scr; if(!S.eng||S.eng.name!=='world') return {skip:true};
+              const TW=st=>{ const u=ulText(String(st.disp).replace(/^asm:\\s*/,'').replace(/^[^∴]*∴\\s*/,''));
+                return canonWff(u.replace(/_/g,''),'proof')===canonWff(st.typed,'proof') ? u : st.typed; };   // underlines typed as "A_"
               for(const st of S.steps){
-                const v= st.kind==='refute' ? 'REFUTE' : st.kind==='asm' ? 'asm: '+st.typed : (st.world ? st.world+': '+st.typed : st.typed);
+                const v= st.kind==='refute' ? 'REFUTE' : st.kind==='asm' ? 'asm: '+TW(st) : (st.world ? st.world+': '+TW(st) : TW(st));
                 const i=document.getElementById('ansInput'); if(!i) return {fail:'no input'};
                 i.value=v; document.getElementById('prfGo').click();
                 const fb=(document.getElementById('fb')||{}).innerText||'';

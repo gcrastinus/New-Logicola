@@ -23,7 +23,7 @@ SETUP = r"""(a)=>{
   state.type = !mc;
   const pp=proofPlayer({setLine:'test',script:s,prompt:'x',forceType:!mc,stars:'auto'});
   pp.mount(host);
-  return s.steps.map(x=>[x.kind, x.typed||'', x.world||'']);
+  return s.steps.map(x=>[x.kind, (()=>{ const u=ulText(String(x.disp||'').replace(/^asm:\\s*/,'').replace(/^[^∴]*∴\\s*/,'')); return canonWff(u.replace(/_/g,''),'proof')===canonWff(x.typed||'','proof') ? u : (x.typed||''); })(), x.world||'']);
 }"""
 
 results = []
@@ -155,7 +155,7 @@ with sync_playwright() as p:
                let host=document.createElement('div'); host.id='T'; document.body.prepend(host);
                if(!document.getElementById('fb')){const f=document.createElement('div');f.id='fb';document.body.prepend(f);}
                const pp=window[g](); pp.mount(host); window.proofPlayer=orig;
-               return cap.steps.map(x=>[x.kind,x.typed||'',x.world||'']); }""", gen)
+               return cap.steps.map(x=>[x.kind,(()=>{ const u=ulText(String(x.disp||'').replace(/^asm:\\s*/,'').replace(/^[^∴]*∴\\s*/,'')); return canonWff(u.replace(/_/g,''),'proof')===canonWff(x.typed||'','proof') ? u : (x.typed||''); })(),x.world||'']); }""", gen)
             allok = True
             for st in sc:
                 if not ok(typ(line(st))): allok = False; break

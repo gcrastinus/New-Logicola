@@ -1274,6 +1274,7 @@ $('printBtn').onclick = () => window.print();
   .branchbtn{background:var(--btn);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:3px 10px;margin-top:7px;font-size:13px;cursor:pointer}
   .branchbtn.closed{background:#4e1919;border-color:var(--bad)}
   .imp{text-decoration:underline;text-underline-offset:3px}
+  .ulpreview{margin:6px 2px 0;font-size:1.15em} .ulpreview u{text-underline-offset:3px}
   /* info tooltip */
   .info-ic{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;
     background:var(--btn);border:1px solid var(--line);color:var(--accent);font-size:11px;font-style:italic;font-weight:700;
@@ -1466,6 +1467,31 @@ function tokenize(s){
 // Canonicalize a wff string for notation-agnostic answer comparison: maps every
 // accepted symbol variant to one internal form and normalizes quantifier styles,
 // so a student may answer in (x)-style or ∀-style, with & or •, → or ⊃, etc.
+/* Underlining in typed answers, as in the original LogiCola: "_" right after a
+   letter underlines it ("A_" = underlined A; in "Ax_" the small letter is
+   underlined). ulText turns displayed HTML (<u>…</u>) into that typed form. */
+const UL_TIP='Put _ after a letter to underline it (so type A_ for A\u0332).';
+const UL_MSG='Incorrect underlining: edit your answer and try again.';
+function ulText(s){
+  return String(s).replace(/<u>([\s\S]*?)<\/u>/g,(m,x)=>x.replace(/<[^>]*>/g,'').replace(/([A-Za-z])/g,'$1_'))
+    .replace(/<[^>]*>/g,'').replace(/&nbsp;/g,' ').replace(/_+/g,'_');
+}
+function ulHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/([A-Za-z])_/g,'<u>$1</u>'); }
+/* typed answer vs. answer: 'ok', 'ul' (right except the underlining), or false */
+function ulCompare(input, answer, mode){
+  const a=canonWff(ulText(answer),mode), t=canonWff(ulText(input),mode);
+  if(t===a) return 'ok';
+  if(t.replace(/_/g,'')===a.replace(/_/g,'')) return 'ul';
+  return false;
+}
+document.addEventListener('input',e=>{
+  const el=e.target; if(!el||el.id!=='ansInput') return;
+  let pv=document.getElementById('ulPreview');
+  if(!/_/.test(el.value)){ if(pv) pv.remove(); return; }
+  if(!pv){ pv=document.createElement('div'); pv.id='ulPreview'; pv.className='ulpreview wff'; pv.setAttribute('aria-live','polite');
+    (el.closest('.answerbox')||el).insertAdjacentElement('afterend',pv); }
+  pv.innerHTML='Reads as: '+ulHtml(el.value);
+});
 function canonWff(s,mode){
   let x=String(s).replace(/\s+/g,'');
   x=x.replace(/[∼~¬!]/g,'~').replace(/[•&∧]/g,'&').replace(/[∨]/g,'v')
@@ -2048,7 +2074,7 @@ const C_BANK = { easy:SETC_EASY, hard:SETC_HARD };
 function genC(){
   const mode = state.cMode || 'easy';
   const pool = mode==='mixed' ? SETC_EASY.concat(SETC_HARD) : (C_BANK[mode] || SETC_EASY);
-  const q = pick(pool);
+  const q = (Math.random()<0.8 && genCTrans(mode==='mixed'?pick(['easy','hard']):mode)) || pick(pool);   // generated items, with the hand-made ones about 1 in 5
   const answer = renderC(q.o[q.c]);
   const instrTail = `Put "(" wherever you see "both," "either," or "if"; a comma groups the parts on either side of it. ${SYM.not} not · ${SYM.and} and · ${SYM.or} or · ${SYM.horseshoe} if-then · ${SYM.threebar} iff.`;
   if(state.type){
@@ -2070,8 +2096,322 @@ function genC(){
     choices
   };
 }
+/* ============================================================================
+   GENERATED TRANSLATIONS — Sets C (easier/harder), H (easier), J (basic).
+   Each item is built as a formula first, then put into English with
+   Gensler's sentence frames ("both/either/if" open a group, a comma marks
+   the main break, "only if", "unless", "provided that", "sufficient",
+   "necessary", "just if", "neither…nor"). A matching reader turns the English
+   back into a formula, and an item is used only if the round trip gives the
+   same formula. Wrong choices must differ in truth value from the answer.
+   ========================================================================== */
+const TR_ADJ=[['active','A'],['bold','B'],['calm','C'],['daring','D'],['eager','E'],['funny','F'],['gentle','G'],
+  ['honest','H'],['kind','K'],['loyal','L'],['modest','M'],['neat','N'],['polite','P'],['rich','R'],['shy','S'],['tall','T'],['wise','W']];
+const trV=n=>({t:'v',n}), trN=a=>({t:'~',a}), trB=(t,a,b)=>({t,a,b}), trNeg=a=>a.t==='~'?a.a:trN(a);
+const trLit=f=>f.t==='v'||(f.t==='~'&&f.a.t==='v');
+function trC(f){ return f.t==='v'?f.n : f.t==='~'?'~'+trC(f.a) : '('+trC(f.a)+({'&':'*','|':'v','>':'>','=':'='}[f.t])+trC(f.b)+')'; }
+function trEval(f,v){ switch(f.t){ case 'v': return !!v[f.n]; case '~': return !trEval(f.a,v);
+  case '&': return trEval(f.a,v)&&trEval(f.b,v); case '|': return trEval(f.a,v)||trEval(f.b,v);
+  case '>': return !trEval(f.a,v)||trEval(f.b,v); case '=': return trEval(f.a,v)===trEval(f.b,v); } }
+function trLetters(f,o=new Set()){ if(f.t==='v') o.add(f.n); else { if(f.a) trLetters(f.a,o); if(f.b) trLetters(f.b,o); } return o; }
+function trEquiv(f,g){ const L=[...new Set([...trLetters(f),...trLetters(g)])];
+  for(let m=0;m<(1<<L.length);m++){ const v={}; L.forEach((x,i)=>v[x]=!!(m>>i&1)); if(trEval(f,v)!==trEval(g,v)) return false; } return true; }
+function trEq(f,g){ return trC(f)===trC(g); }
+
+/* ---- English for propositional formulas ---- */
+// letter style: "A", "not A"; you style: "you're bold", "you aren't bold"
+function trEng(f, sty, words){
+  const W=n=>words[n];
+  const contract=g=> g.t==='v' || (g.t==='~'&&g.a.t==='v') || ((g.t==='&'||g.t==='|')&&contract(g.a)&&contract(g.b));
+  const pp=g=> g.t==='v'?W(g.n) : g.t==='~'?'not '+W(g.a.n) : g.t==='&'?`both ${pp(g.a)} and ${pp(g.b)}` : `either ${pp(g.a)} or ${pp(g.b)}`;
+  const prim=g=>{   // a self-delimiting piece
+    if(sty==='you'){
+      if(g.t==='v') return `you're ${W(g.n)}`;
+      if(g.t==='~'&&g.a.t==='v') return `you aren't ${W(g.a.n)}`;
+      if(contract(g)) return `you're ${pp(g)}`;
+      if(g.t==='~'&&contract(g.a)&&g.a.t!=='~'){ const h=g.a;
+        if(h.t==='|'&&trLit(h.a)&&trLit(h.b)&&h.a.t==='v'&&h.b.t==='v'&&Math.random()<0.5) return `you're neither ${W(h.a.n)} nor ${W(h.b.n)}`;
+        return `you aren't ${pp(h)}`; }
+    } else {
+      if(g.t==='v') return g.n;
+      if(g.t==='~'&&g.a.t==='|'&&g.a.a.t==='v'&&g.a.b.t==='v'&&Math.random()<0.4) return `neither ${g.a.a.n} nor ${g.a.b.n}`;
+      if(g.t==='~') return 'not '+prim(g.a);
+    }
+    if(g.t==='~') return "it's false that "+prim(g.a);
+    if(g.t==='&') return `both ${prim(g.a)} and ${prim(g.b)}`;
+    if(g.t==='|') return `either ${prim(g.a)} or ${prim(g.b)}`;
+    if(g.t==='>') return `if ${prim(g.a)} then ${prim(g.b)}`;
+    return null;
+  };
+  // top level: a comma marks the main break
+  if((f.t==='&'||f.t==='|')&&!trLit(f.a)&&Math.random()<0.7 && !(sty==='you'&&contract(f)))
+    return `${prim(f.a)}, ${f.t==='&'?'and':'or'} ${prim(f.b)}`;
+  if(f.t==='>'&&!trLit(f.b)&&Math.random()<0.6) return `if ${prim(f.a)}, then ${prim(f.b)}`;
+  if(f.t==='>'&&!trLit(f.a)&&Math.random()<0.6) return `if ${prim(f.a)}, then ${prim(f.b)}`;
+  return prim(f);
+}
+/* idioms (harder): the main connective is an idiom between two literals */
+const TR_IDIOMS=['onlyif','onlyifFront','unless','unlessFront','provided','providedFront','iff','justif','suff','nec','necsuff','neither','notboth'];
+function trIdiomEng(kind,a,b,sty,words){
+  const cl=g=> sty==='you' ? (g.t==='v'?`you're ${words[g.n]}`:`you aren't ${words[g.a.n]}`) : (g.t==='v'?g.n:'not '+g.a.n);
+  const gr=g=> sty==='you' ? (g.t==='v'?`being ${words[g.n]}`:`not being ${words[g.a.n]}`) : (g.t==='v'?g.n:'not '+g.a.n);
+  switch(kind){
+    case 'onlyif': return [`${cl(a)} only if ${cl(b)}`, trB('>',a,b)];
+    case 'onlyifFront': return [`only if ${cl(b)}, ${cl(a)}`, trB('>',a,b)];
+    case 'unless': return [`${cl(a)} unless ${cl(b)}`, trB('|',a,b)];
+    case 'unlessFront': return [`unless ${cl(b)}, ${cl(a)}`, trB('|',b,a)];
+    case 'provided': return [`${cl(a)} provided that ${cl(b)}`, trB('>',b,a)];
+    case 'providedFront': return [`provided that ${cl(b)}, ${cl(a)}`, trB('>',b,a)];
+    case 'iff': return [`${cl(a)} if and only if ${cl(b)}`, trB('=',a,b)];
+    case 'justif': return [`${cl(a)} just if ${cl(b)}`, trB('=',a,b)];
+    case 'suff': return [`${gr(a)} is sufficient for ${gr(b)}`, trB('>',a,b)];
+    case 'nec': return [`${gr(a)} is necessary for ${gr(b)}`, trB('>',b,a)];
+    case 'necsuff': return [`${gr(a)} is necessary and sufficient for ${gr(b)}`, trB('=',a,b)];
+    case 'neither': return a.t==='v'&&b.t==='v' ? [sty==='you'?`you're neither ${words[a.n]} nor ${words[b.n]}`:`neither ${a.n} nor ${b.n}`, trN(trB('|',a,b))] : null;
+    case 'notboth': return [sty==='you'?`you aren't both ${a.t==='v'?words[a.n]:'not '+words[a.a.n]} and ${b.t==='v'?words[b.n]:'not '+words[b.a.n]}`:`not both ${a.t==='v'?a.n:'not '+a.a.n} and ${b.t==='v'?b.n:'not '+b.a.n}`, trN(trB('&',a,b))];
+  }
+}
+/* the reader: English (as produced above) back to a formula */
+function trReadC(s, words){
+  const inv={}; Object.entries(words||{}).forEach(([k,v])=>inv[v]=k);
+  let t=s.replace(/[.\u201c\u201d"]/g,'').replace(/\u2019/g,"'").trim();
+  if(!/^[A-Z](\s|,|$)/.test(t)) t=t.charAt(0).toLowerCase()+t.slice(1);
+  t=t.replace(/\byou aren't\b/g,'not').replace(/\byou're\b/g,'').replace(/\bnot being\b/g,'not').replace(/\bbeing\b/g,'')
+     .replace(/\bit's false that\b/g,'not').replace(/\bif and only if\b/g,'IFF').replace(/\bjust if\b/g,'IFF')
+     .replace(/\bis necessary and sufficient for\b/g,'IFF').replace(/\bis sufficient for\b/g,'SUFF').replace(/\bis necessary for\b/g,'NEC')
+     .replace(/\bonly if\b/g,'ONLYIF').replace(/\bprovided that\b/g,'PROV').replace(/,/g,' , ');
+  const tk=t.split(/\s+/).filter(Boolean);
+  let i=0;
+  const atom=w=>{ if(inv[w]) return trV(inv[w]); if(/^[A-Z]$/.test(w)) return trV(w); throw 'word '+w; };
+  const prim=()=>{ const w=tk[i++];
+    if(w==='not') return trN(prim());
+    if(w==='both'){ const a=prim(); if(tk[i++]!=='and') throw 'and'; return trB('&',a,prim()); }
+    if(w==='either'){ const a=prim(); if(tk[i++]!=='or') throw 'or'; return trB('|',a,prim()); }
+    if(w==='neither'){ const a=prim(); if(tk[i++]!=='nor') throw 'nor'; return trN(trB('|',a,prim())); }
+    if(w==='if'){ const a=prim(); if(tk[i]===',') i++; if(tk[i++]!=='then') throw 'then'; return trB('>',a,prim()); }
+    if(w===undefined) throw 'end';
+    return atom(w); };
+  const top=()=>{
+    const w=tk[0];
+    if(w==='ONLYIF'||w==='unless'||w==='PROV'){ i=1; const b=prim(); if(tk[i++]!==',') throw ','; const a=prim();
+      return w==='ONLYIF'?trB('>',a,b): w==='unless'?trB('|',b,a): trB('>',b,a); }
+    const a=prim();
+    if(i>=tk.length) return a;
+    const c=tk[i++];
+    if(c===','){ const d=tk[i++]; const b=prim(); if(d==='and') return trB('&',a,b); if(d==='or') return trB('|',a,b); throw 'comma '+d; }
+    const b=prim();
+    if(c==='ONLYIF'||c==='SUFF') return trB('>',a,b);
+    if(c==='NEC'||c==='PROV') return trB('>',b,a);
+    if(c==='unless') return trB('|',a,b);
+    if(c==='IFF') return trB('=',a,b);
+    throw 'conn '+c; };
+  try{ const f=top(); return i===tk.length?f:null; }catch(e){ return null; }
+}
+/* wrong-but-plausible choices */
+function trDistractors(f){
+  const out=[];
+  const add=g=>{ if(g&&!trEquiv(g,f)&&!out.some(h=>trEq(h,g))) out.push(g); };
+  const bin=g=>g.t!=='v'&&g.t!=='~';
+  const negInside=g=> g.t==='~'&&bin(g.a) ? trB(g.a.t,trN(g.a.a),g.a.b) : null;
+  if(bin(f)){
+    if(bin(f.b)) add(trB(f.b.t,trB(f.t,f.a,f.b.a),f.b.b));                 // regrouped to the left
+    if(bin(f.a)) add(trB(f.a.t,f.a.a,trB(f.t,f.a.b,f.b)));                 // regrouped to the right
+    if(f.t==='>') add(trB('>',f.b,f.a));                                    // converse
+    if(f.t==='>') add(trB('>',trNeg(f.a),trNeg(f.b)));                      // denying both sides
+    if(f.t==='|') add(trB('>',f.a,f.b));
+    if(f.t==='=') add(trB('>',f.a,f.b)), add(trB('>',f.b,f.a));
+    add(trB(f.t==='&'?'|':f.t==='|'?'&':f.t==='>'?'&':'&',f.a,f.b));       // wrong connective
+    if(f.a.t==='~') add(trB(f.t,f.a.a,f.b)); else add(trB(f.t,trN(f.a),f.b));
+    if(f.b.t==='~') add(trB(f.t,f.a,f.b.a)); else add(trB(f.t,f.a,trN(f.b)));
+    add(trN(f));
+  }
+  if(f.t==='~'){ add(negInside(f)); if(bin(f.a)){ add(f.a); add(trB(f.a.t,trNeg(f.a.a),trNeg(f.a.b))); if(f.a.t==='>') add(trN(trB('>',f.a.b,f.a.a))); } else add(f.a); }
+  return shuffle(out);
+}
+function trWords(n){ const ws=sampleDistinct(TR_ADJ,n); const words={}; ws.forEach(([w,l])=>words[l]=w); return {words, Ls:ws.map(x=>x[1])}; }
+function genCTrans(mode){
+  for(let t=0;t<200;t++){
+    const sty=Math.random()<0.6?'you':'letter';
+    let Ls, words={};
+    if(sty==='you'){ const r=trWords(3); Ls=r.Ls; words=r.words; }
+    else { Ls=sampleDistinct(['A','B','C','D','E','F','G','H','K','L','M','N','P','R','S','T','W'],3); Ls.forEach(l=>words[l]=l); }
+    const lit=(i)=>Math.random()<0.3?trN(trV(Ls[i])):trV(Ls[i]);
+    let f, eng;
+    if(mode==='hard' && Math.random()<0.85){
+      const a=lit(0), b=lit(1), k=pick(TR_IDIOMS);
+      const r=trIdiomEng(k,a,b,sty,words); if(!r) continue;
+      [eng,f]=r;
+    } else {
+      const op=()=>pick(['&','|','>']);
+      const shape=rand(5);
+      if(shape===0) f=trB(op(),lit(0),trB(op(),lit(1),lit(2)));
+      else if(shape===1) f=trB(op(),trB(op(),lit(0),lit(1)),lit(2));
+      else if(shape===2) f=trN(trB(op(),lit(0),lit(1)));
+      else if(shape===3) f=trB(op(),lit(0),lit(1));
+      else f=trB(op(),trN(trB(pick(['&','|']),trV(Ls[0]),trV(Ls[1]))),lit(2));
+      if(f.t!=='~'&&!trLit(f.a)&&!trLit(f.b)) continue;
+      eng=trEng(f,sty,words);
+    }
+    if(!eng) continue;
+    const back=trReadC(eng, sty==='you'?words:null);
+    if(!back||!trEq(back,f)) continue;                     // English must read back as exactly this formula
+    const ds=trDistractors(f); if(ds.length<3) continue;
+    const opts=[trC(f)].concat(ds.slice(0,3).map(trC));
+    return {p:cap(eng), o:opts, c:0, f, dsF:ds.slice(0,3), words:sty==='you'?words:null, gen:true};
+  }
+  return null;
+}
+/* ---- Set H easier: quantifier-initial translations ---- */
+const TR_QADJ=[['happy','H'],['rich','R'],['famous','F'],['kind','K'],['clever','C'],['mortal','M'],['Italian','I'],['German','G'],['wise','W'],['brave','B'],['tall','T'],['young','Y']];
+function trQStr(q){   // q: {neg, q:'all'|'ex', body} body over {t:'p',p}
+  const b=g=> g.t==='p'?`${g.p}x` : g.t==='~'?SYM.not+b(g.a) : `(${b(g.a)} ${({'&':SYM.and,'|':SYM.or,'>':SYM.horseshoe})[g.t]} ${b(g.b)})`;
+  return (q.neg?SYM.not:'')+(q.q==='all'?qU('x'):qE('x'))+b(q.body);
+}
+function trQEval(q,dom){ const ev=(g,x)=> g.t==='p'?x.has(g.p): g.t==='~'?!ev(g.a,x): g.t==='&'?ev(g.a,x)&&ev(g.b,x): g.t==='|'?ev(g.a,x)||ev(g.b,x): !ev(g.a,x)||ev(g.b,x);
+  const r= q.q==='all'? dom.every(x=>ev(q.body,x)) : dom.some(x=>ev(q.body,x)); return q.neg?!r:r; }
+function trQEquiv(q1,q2,Ps){   // monadic: a model is a nonempty set of "types"
+  const types=[]; for(let m=0;m<(1<<Ps.length);m++) types.push(new Set(Ps.filter((p,i)=>m>>i&1)));
+  for(let s=1;s<(1<<types.length);s++){ const dom=types.filter((t,i)=>s>>i&1); if(trQEval(q1,dom)!==trQEval(q2,dom)) return false; } return true; }
+function genHTrans(){
+  for(let t=0;t<200;t++){
+    const ws=sampleDistinct(TR_QADJ,3), W={}; ws.forEach(([w,l])=>W[l]=w);
+    const [P,Q,R]=ws.map(x=>x[1]); const p=x=>({t:'p',p:x}), n=a=>({t:'~',a}), B=(t,a,b)=>({t,a,b});
+    const form=pick(['every','some','none','notevery','somenot','everyor','someand','noneboth','all','some2','no','notall','somenot2','only']);
+    let eng, q;
+    const rKind=Math.random()<0.25?'not':Math.random()<0.2?'both':'one';
+    const sKind=Math.random()<0.2?'not':Math.random()<0.25?pick(['or','and']):'one';
+    const rF= rKind==='not'?n(p(P)) : rKind==='both'?B('&',p(P),p(R)) : p(P);
+    const sF= sKind==='not'?n(p(Q)) : sKind==='or'?B('|',p(Q),p(R)) : sKind==='and'?B('&',p(Q),p(R)) : p(Q);
+    if(rKind==='both'&&(sKind==='or'||sKind==='and')) continue;
+    const rPl= rKind==='not'?`who aren't ${W[P]}` : rKind==='both'?`who are both ${W[P]} and ${W[R]}` : `who are ${W[P]}`;
+    const rSg= rKind==='not'?`who isn't ${W[P]}` : rKind==='both'?`who is both ${W[P]} and ${W[R]}` : `who is ${W[P]}`;
+    const sPl= sKind==='not'?`aren't ${W[Q]}` : sKind==='or'?`are either ${W[Q]} or ${W[R]}` : sKind==='and'?`are both ${W[Q]} and ${W[R]}` : `are ${W[Q]}`;
+    const sSg= sKind==='not'?`isn't ${W[Q]}` : sKind==='or'?`is either ${W[Q]} or ${W[R]}` : sKind==='and'?`is both ${W[Q]} and ${W[R]}` : `is ${W[Q]}`;
+    switch(form){
+      case 'every': eng=`Everyone is ${W[P]}.`; q={q:'all',body:p(P)}; break;
+      case 'some': eng=`Someone is ${W[P]}.`; q={q:'ex',body:p(P)}; break;
+      case 'none': eng=`No one is ${W[P]}.`; q={neg:true,q:'ex',body:p(P)}; break;
+      case 'notevery': eng=`Not everyone is ${W[P]}.`; q={neg:true,q:'all',body:p(P)}; break;
+      case 'somenot': eng=`Someone isn't ${W[P]}.`; q={q:'ex',body:n(p(P))}; break;
+      case 'everyor': eng=`Everyone is either ${W[P]} or ${W[Q]}.`; q={q:'all',body:B('|',p(P),p(Q))}; break;
+      case 'someand': eng=`Someone is both ${W[P]} and ${W[Q]}.`; q={q:'ex',body:B('&',p(P),p(Q))}; break;
+      case 'noneboth': eng=`No one is both ${W[P]} and ${W[Q]}.`; q={neg:true,q:'ex',body:B('&',p(P),p(Q))}; break;
+      case 'all': eng=`All ${rPl} ${sPl}.`; q={q:'all',body:B('>',rF,sF)}; break;
+      case 'some2': if(sKind==='not') continue; eng=`Some ${rPl} ${sPl}.`; q={q:'ex',body:B('&',rF,sF)}; break;
+      case 'no': if(sKind==='not'||rKind==='not') continue; eng=`No one ${rSg} ${sSg}.`; q={neg:true,q:'ex',body:B('&',rF,sF)}; break;
+      case 'notall': if(sKind==='not') continue; eng=`Not all ${rPl} ${sPl}.`; q={neg:true,q:'all',body:B('>',rF,sF)}; break;
+      case 'somenot2': if(sKind!=='one') continue; eng=`Some ${rPl} aren't ${W[Q]}.`; q={q:'ex',body:B('&',rF,n(p(Q)))}; break;
+      case 'only': eng=`Only those who are ${W[P]} are ${W[Q]}.`; q={q:'all',body:B('>',p(Q),p(P))}; break;
+    }
+    const back=trReadH(eng,W);
+    if(!back||trQStr(back)!==trQStr(q)) continue;
+    // wrong choices: the classic slips
+    const Ps=[P,Q,R], ds=[];
+    const add=d=>{ if(d&&!trQEquiv(d,q,Ps)&&!ds.some(e=>trQStr(e)===trQStr(d))&&trQStr(d)!==trQStr(q)) ds.push(d); };
+    const b=q.body;
+    if(b.t==='>'){ add({...q,body:B('&',b.a,b.b)}); add({...q,body:B('>',b.b,b.a)}); add({...q,q:'ex'}); }
+    if(b.t==='&'){ add({...q,body:B('>',b.a,b.b)}); add({...q,q:'all'}); }
+    add({...q,neg:!q.neg});
+    add({neg:false,q:q.q==='all'?'ex':'all',body:n(b)});
+    add({...q,q:q.q==='all'?'ex':'all'});
+    if(b.t!=='p'&&b.t!=='~') add({...q,body:B(b.t,b.a,n(b.b))});
+    if(b.t==='|') add({...q,body:B('&',b.a,b.b)});
+    if(b.t==='p'||b.t==='~') add({...q,body:B('>',b,p(Q))});
+    if(ds.length<3) continue;
+    const pickD=shuffle(ds).slice(0,3);
+    return {e:eng, ans:trQStr(q), ds:pickD.map(trQStr), dsQ:pickD, q, W, Ps};
+  }
+  return null;
+}
+function trReadH(e,W){
+  const inv={}; Object.entries(W).forEach(([l,w])=>inv[w]=l);
+  const s=e.replace(/\.$/,'');
+  const p=x=>({t:'p',p:x}), n=a=>({t:'~',a}), B=(t,a,b)=>({t,a,b});
+  const adj=w=>inv[w]?p(inv[w]):null;
+  const phr=x=>{ let m;   // "both A and B" / "either A or B" / "A"
+    if((m=x.match(/^both (\S+) and (\S+)$/))) return adj(m[1])&&adj(m[2])?B('&',adj(m[1]),adj(m[2])):null;
+    if((m=x.match(/^either (\S+) or (\S+)$/))) return adj(m[1])&&adj(m[2])?B('|',adj(m[1]),adj(m[2])):null;
+    return adj(x); };
+  const who=x=>{ let m; if((m=x.match(/^who (?:aren't|isn't) (.+)$/))){ const a=phr(m[1]); return a&&n(a); }
+    if((m=x.match(/^who (?:are|is) (.+)$/))) return phr(m[1]); return null; };
+  const pred=x=>{ let m; if((m=x.match(/^(?:aren't|isn't) (.+)$/))){ const a=phr(m[1]); return a&&n(a); }
+    if((m=x.match(/^(?:are|is) (.+)$/))) return phr(m[1]); return null; };
+  let m;
+  if((m=s.match(/^Everyone is (.+)$/))){ const b=phr(m[1]); return b&&{q:'all',body:b}; }
+  if((m=s.match(/^Someone isn't (.+)$/))){ const b=phr(m[1]); return b&&{q:'ex',body:n(b)}; }
+  if((m=s.match(/^Someone is (.+)$/))){ const b=phr(m[1]); return b&&{q:'ex',body:b}; }
+  if((m=s.match(/^No one is (.+)$/))){ const b=phr(m[1]); return b&&{neg:true,q:'ex',body:b}; }
+  if((m=s.match(/^Not everyone is (.+)$/))){ const b=phr(m[1]); return b&&{neg:true,q:'all',body:b}; }
+  if((m=s.match(/^Only those who are (\S+) are (\S+)$/))) return adj(m[1])&&adj(m[2])&&{q:'all',body:B('>',adj(m[2]),adj(m[1]))};
+  // "All/Some/Not all who … are …", "No one who … is …": split before the last are/aren't/is/isn't that follows "who"
+  const split=(rest)=>{ const ws=rest.split(' '); for(let k=ws.length-1;k>1;k--){ if(/^(are|aren't|is|isn't)$/.test(ws[k])){ const r=who(ws.slice(0,k).join(' ')), q=pred(ws.slice(k).join(' ')); if(r&&q) return [r,q]; } } return null; };
+  if((m=s.match(/^All (who .+)$/))){ const r=split(m[1]); return r&&{q:'all',body:B('>',r[0],r[1])}; }
+  if((m=s.match(/^Not all (who .+)$/))){ const r=split(m[1]); return r&&{neg:true,q:'all',body:B('>',r[0],r[1])}; }
+  if((m=s.match(/^Some (who .+)$/))){ const r=split(m[1]); return r&&{q:'ex',body:B('&',r[0],r[1])}; }
+  if((m=s.match(/^No one (who .+)$/))){ const r=split(m[1]); return r&&{neg:true,q:'ex',body:B('&',r[0],r[1])}; }
+  return null;
+}
+/* ---- Set J basic: possible / necessary / impossible over simple contents ---- */
+const TR_STMT_NEG={R:"it isn't raining",S:"it isn't snowing",W:"we don't go to work",P:"we don't have a picnic",G:"the game isn't on",
+  H:"I don't stay home",C:"the car doesn't start",M:"the meeting isn't held",T:"the train isn't late",B:"the bakery isn't open",F:"the fields aren't wet",D:"the dog doesn't bark"};
+function trMStr(f){ return f.t==='v'?f.n : f.t==='~'?SYM.not+trMStr(f.a) : f.t==='box'?SYM.box+trMStr(f.a) : f.t==='dia'?SYM.diamond+trMStr(f.a)
+  : `(${trMStr(f.a)} ${({'&':SYM.and,'|':SYM.or,'>':SYM.horseshoe})[f.t]} ${trMStr(f.b)})`; }
+function trMEval(f,ws,w){ switch(f.t){ case 'v': return !!(ws[w]>>f.i&1); case '~': return !trMEval(f.a,ws,w);
+  case '&': return trMEval(f.a,ws,w)&&trMEval(f.b,ws,w); case '|': return trMEval(f.a,ws,w)||trMEval(f.b,ws,w);
+  case '>': return !trMEval(f.a,ws,w)||trMEval(f.b,ws,w); case 'box': return ws.every((_,k)=>trMEval(f.a,ws,k)); case 'dia': return ws.some((_,k)=>trMEval(f.a,ws,k)); } }
+function trMEquiv(f,g){   // S5 with two letters: every set of world-types, every actual world
+  for(let s=1;s<16;s++){ const ws=[0,1,2,3].filter(k=>s>>k&1); for(let w=0;w<ws.length;w++) if(trMEval(f,ws,w)!==trMEval(g,ws,w)) return false; } return true; }
+function genJTrans(){
+  for(let t=0;t<200;t++){
+    const [A,B]=sampleDistinct(STMTS,2);
+    const a={t:'v',n:A.let,i:0}, b={t:'v',n:B.let,i:1}, N=x=>({t:'~',a:x}), Bn=(t,x,y)=>({t,a:x,b:y}), Bx=x=>({t:'box',a:x}), Di=x=>({t:'dia',a:x});
+    const ct=pick(['A','A','notA','and','or','if']);
+    let cf, ce;
+    if(ct==='A'){ cf=a; ce=A.txt; } else if(ct==='notA'){ cf=N(a); ce=TR_STMT_NEG[A.let]; }
+    else if(ct==='and'){ cf=Bn('&',a,b); ce=`both ${A.txt} and ${B.txt}`; }
+    else if(ct==='or'){ cf=Bn('|',a,b); ce=`either ${A.txt} or ${B.txt}`; }
+    else { cf=Bn('>',a,b); ce=`if ${A.txt} then ${B.txt}`; }
+    const mk=pick(['poss','nec','imposs','notnec','poss','nec','inside','insidePoss']);
+    let f, e;
+    if(mk==='inside'){ f=Bn('>',a,Bx(b)); e=`If ${A.txt}, then it's necessary that ${B.txt}.`; }
+    else if(mk==='insidePoss'){ f=Bn('>',a,Di(b)); e=`If ${A.txt}, then it's possible that ${B.txt}.`; }
+    else { const pre={poss:"It's possible that",nec:"It's necessary that",imposs:"It's impossible that",notnec:"It's not necessary that"}[mk];
+      f= mk==='poss'?Di(cf): mk==='nec'?Bx(cf): mk==='imposs'?N(Di(cf)): N(Bx(cf)); e=`${pre} ${ce}.`; }
+    const back=trReadJ(e);
+    if(!back||trMStr(back)!==trMStr(f)) continue;
+    const ds=[], add=d=>{ if(d&&!trMEquiv(d,f)&&!ds.some(x=>trMStr(x)===trMStr(d))) ds.push(d); };
+    if(f.t==='>'){ add(Bx(Bn('>',a,b))); add(Di(Bn('>',a,b))); add(Bn('>',a,f.b.t==='box'?Di(b):Bx(b))); add(Bn('>',Bx(a),b)); }
+    else { const inner= f.t==='~'?f.a.a:f.a;
+      add(Bx(inner)); add(Di(inner)); add(N(Di(inner))); add(N(Bx(inner))); add(Bx(inner.t==='~'?inner.a:N(inner))); add(Di(inner.t==='~'?inner.a:N(inner)));
+      if(inner.t==='>'){ add(Bn('>',a,Bx(b))); add(Bn('>',a,Di(b))); }
+      if(inner.t==='&') add(Bn('&',f.t==='dia'?Di(a):Bx(a),f.t==='dia'?Di(b):Bx(b)));
+      if(inner.t==='|') add(Bn('|',Bx(a),Bx(b))); }
+    if(ds.length<3) continue;
+    const pickD=shuffle(ds).slice(0,3);
+    return {e, ans:trMStr(f), ds:pickD.map(trMStr), dsF:pickD, f};
+  }
+  return null;
+}
+function trReadJ(e){
+  const byTxt={}, byNeg={}; STMTS.forEach((s,k)=>{ byTxt[s.txt]=s.let; byNeg[TR_STMT_NEG[s.let]]=s.let; });
+  const idx={}; let next=0; const v=l=>{ if(!(l in idx)) idx[l]=next++; return {t:'v',n:l,i:idx[l]}; };
+  const lit=x=> byTxt[x]?v(byTxt[x]) : byNeg[x]?{t:'~',a:v(byNeg[x])} : null;
+  const content=x=>{ let m;
+    if((m=x.match(/^both (.+) and (.+)$/))){ const p=lit(m[1]),q=lit(m[2]); return p&&q&&{t:'&',a:p,b:q}; }
+    if((m=x.match(/^either (.+) or (.+)$/))){ const p=lit(m[1]),q=lit(m[2]); return p&&q&&{t:'|',a:p,b:q}; }
+    if((m=x.match(/^if (.+) then (.+)$/))){ const p=lit(m[1]),q=lit(m[2]); return p&&q&&{t:'>',a:p,b:q}; }
+    return lit(x); };
+  const s=e.replace(/\.$/,''); let m;
+  if((m=s.match(/^If (.+), then it's (necessary|possible) that (.+)$/))){ const p=lit(m[1]), q=lit(m[3]); return p&&q&&{t:'>',a:p,b:{t:m[2]==='necessary'?'box':'dia',a:q}}; }
+  if((m=s.match(/^It's possible that (.+)$/))){ const c=content(m[1]); return c&&{t:'dia',a:c}; }
+  if((m=s.match(/^It's necessary that (.+)$/))){ const c=content(m[1]); return c&&{t:'box',a:c}; }
+  if((m=s.match(/^It's impossible that (.+)$/))){ const c=content(m[1]); return c&&{t:'~',a:{t:'dia',a:c}}; }
+  if((m=s.match(/^It's not necessary that (.+)$/))){ const c=content(m[1]); return c&&{t:'~',a:{t:'box',a:c}}; }
+  return null;
+}
+
 function normalizeProp(input,answer){
-  return canonWff(input)===canonWff(answer);
+  return ulCompare(input,answer)==='ok';
 }
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 
@@ -2194,6 +2534,16 @@ function hBasic(opts){
   const p=P.let,q=Q.let, wp=P.word, wq=Q.word;
   const UX=qU('x'), EX=qE('x');   // universal / existential quantifiers in the chosen style
   let english,answer;
+  const gH = !harder && Math.random()<0.8 ? genHTrans() : null;   // generated quantifier-first items (old forms about 1 in 5)
+  if(gH) return {
+    setLine:'Set H — Quantificational Translations',
+    prompt:`"${gH.e}"<br>translates into quantificational logic as:`,
+    instr:`"${qU('x')}" = for all x; "${qE('x')}" = for some x. With "all…is…" use "${SYM.horseshoe}"; otherwise use "${SYM.and}". "Only those who are A are B" = all who are B are A.`,
+    mode: opts.type?'type':'mc',
+    choices: mc(gH.ans, gH.ds),
+    answer:gH.ans, accept:normalizeProp,
+    explain:()=>`Answer: ${wff(gH.ans)}.`
+  };
   switch(f){
     case 'alle': english=`Everyone is ${wp}.`; answer=`${UX}${p}x`; break;
     case 'some': english=`Someone is ${wp}.`;  answer=`${EX}${p}x`; break;
@@ -2272,6 +2622,16 @@ function jBasic(opts){
   const forms=harder?['nec_and_poss','entails','contingent','consistent']:['possible','necessary','impossible','notnec'];
   const f=pick(forms);
   let english,answer;
+  const gJ = !harder && Math.random()<0.8 ? genJTrans() : null;   // generated items (old forms about 1 in 5)
+  if(gJ) return {
+    setLine:'Set J — Modal Translations',
+    prompt:`"${gJ.e}"<br>translates into modal logic as:`,
+    instr:`"${SYM.diamond}A" = possibly A (true in some world); "${SYM.box}A" = necessarily A (true in all worlds). Use a separate box or diamond for each modal word. "It's necessary that if A then B" puts the box outside; "If A, then it's necessary that B" puts it inside.`,
+    mode:opts.type?'type':'mc',
+    choices: mc(gJ.ans, gJ.ds),
+    answer:gJ.ans, accept:normalizeProp,
+    explain:()=>`Answer: ${wff(gJ.ans)}.`
+  };
   switch(f){
     case 'possible':  english=`It's possible that ${A.txt}.`; answer=`${SYM.diamond}${a}`; break;
     case 'necessary': english=`It's necessary that ${A.txt}.`;answer=`${SYM.box}${a}`; break;
@@ -4136,17 +4496,32 @@ function proofPlayer(cfg){
     /* resolve a typed (or chosen) line: the scripted step, an out-of-order
        scripted step, or any other legal line. Returns true if accepted. */
     const parseTyped=(v)=>{
+      if(/</.test(String(v))) v=ulText(v);
       v=String(v).trim().replace(/^([DWUu]+)\s*∴\s*/,'$1: ');
       const m=v.match(/^asm[:.]?\s*(.*)$/i);
       const body=m?m[1]:v.replace(/^[∴:.\s]+/,'');
       const wm=body.match(/^([DWU]+|u)\s*[:.]\s*(.*)$/i);
       return {asm:!!m, body, world:wm?wm[1].toUpperCase():'', wff:wm?wm[2]:body};
     };
-    const candMatches=(c,t)=>{
-      if((c.kind==='asm')!==t.asm) return false;
-      const wantW=(c.world||'').toUpperCase().replace(/[^A-Z]/g,''), wantF=canonP(c.typed);
-      return (t.world===wantW && canonP(t.wff)===wantF) || (wantW==='' && canonP(t.body)===wantF);
+    /* the step's formula in typed form with underlines ("A_"), read off its display */
+    const ulOf=(st)=>ulText(String(st.disp||'').replace(/^asm:\s*/,'').replace(new RegExp('^[^'+SYM.therefore+']*'+SYM.therefore+'\\s*'),''));
+    /* 'ok' | 'ul' (only the underlining is off) | false */
+    const wffMatch=(st,typedWff)=>{
+      const wantF=canonP(ulText(st.typed)).replace(/_/g,''), ty=canonP(typedWff);
+      if(ty.replace(/_/g,'')!==wantF) return false;
+      const u=canonP(ulOf(st));
+      if(u.replace(/_/g,'')!==wantF) return 'ok';          // no reliable underline info for this line
+      return ty===u ? 'ok' : 'ul';
     };
+    const candMatchU=(c,t)=>{
+      if((c.kind==='asm')!==t.asm) return false;
+      const wantW=(c.world||'').toUpperCase().replace(/[^A-Z]/g,'');
+      const a= t.world===wantW ? wffMatch(c,t.wff) : false;
+      if(a==='ok') return 'ok';
+      const b= wantW==='' ? wffMatch(c,t.body) : false;
+      return b==='ok' ? 'ok' : (a||b||false);
+    };
+    const candMatches=(c,t)=>candMatchU(c,t)==='ok';
     function legalStep(v){
       if(/^refute$/i.test(String(v).trim())){
         const r=replan();
@@ -4160,7 +4535,7 @@ function proofPlayer(cfg){
       if(!ENG && !t.asm && openAsmCount()===1 && contraPair()){
         const k=S.steps.findIndex((x,ii)=>ii>=idx&&x.kind==='raa');
         if(k>=0 && k===S.steps.length-1){ const r=S.steps[k];
-          if(!(r.world||'') && canonP(t.body)===canonP(r.typed)){
+          if(!(r.world||'') && wffMatch(r,t.body)==='ok'){
             const pr=contraPair(), ai=openAsm();
             return {st:Object.assign({},r,{just:`{from ${ai+1}; ${pr[0]+1} contradicts ${pr[1]+1}}`}), cut:true};
           }
@@ -4262,9 +4637,10 @@ function proofPlayer(cfg){
             const worldTyped=wm?wm[1].toUpperCase():'';
             const wffTyped=wm?wm[2]:body;
             const want=(st.world||'');
-            const wantW=want.toUpperCase().replace(/[^A-Z]/g,''), wantF=canonP(stepTyped(st));
+            const wantW=want.toUpperCase().replace(/[^A-Z]/g,'');
             // "u:A" may be a world prefix or belief notation, so try both readings
-            ok = prefOk && ((worldTyped===wantW && canonP(wffTyped)===wantF) || (wantW==='' && canonP(body)===wantF));
+            const a= worldTyped===wantW ? wffMatch(st,wffTyped) : false, b= wantW==='' ? wffMatch(st,body) : false;
+            ok = prefOk && (a==='ok'||b==='ok' ? true : (a||b) ? 'ul' : false);
           }
           return ok;
         };
@@ -4278,19 +4654,23 @@ function proofPlayer(cfg){
           }
           if(st.kind==='asm'){
             const t=parseTyped(v);
-            const wantF=canonP(stepTyped(st));
-            if(!t.asm && (canonP(t.wff)===wantF || canonP(t.body)===wantF)){
+            if(!t.asm && (wffMatch(st,t.wff) || wffMatch(st,t.body))){
               const c=scoringOn()?Math.floor(state.level/2):0; applyDelta(-c);
               const fb=$('fb'); fb.className='feedback no show';
               fb.innerHTML=`❌ Type "ASM:" before the formula.${c?` (−${c})`:''}`;
               return;
             }
           }
-          const j=eligibleSteps().find(k=>matchOne(S.steps[k],v));
+          const j=eligibleSteps().find(k=>matchOne(S.steps[k],v)===true);
           if(j!==undefined){ promote(j); right(); return; }
           const res=legalStep(v);
-          if(res) acceptLegal(res);
-          else wrong(stepAnswerText(st));
+          if(res){ acceptLegal(res); return; }
+          // right line, wrong underlining: say so and let the student edit (no penalty)
+          const tU=parseTyped(v);
+          if(eligibleSteps().some(k=>matchOne(S.steps[k],v)==='ul') || legalCandidates().some(c=>candMatchU(c,tU)==='ul')){
+            const fb=$('fb'); fb.className='feedback no show'; fb.innerHTML='❌ '+UL_MSG; inp.focus(); return;
+          }
+          wrong(stepAnswerText(st));
         };
         ctl.querySelector('#prfGo').onclick=submit;
         inp.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); });
@@ -7147,8 +7527,9 @@ function genL(opts){
   };
   return { setLine:`Set L — ${mode==='deon'?'Deontic':'Imperative'} Translations`,
     prompt:`"${it.e}"<br>translates into ${mode==='deon'?'deontic':'imperative'} logic as:`,
-    instr:`Underline the agent letter to make an imperative ("do it") rather than an indicative ("you're doing it"); underline imperative parts but not factual ones.${mode==='deon'?` "O" = ought; "R" = all right; wrong = ${SYM.not}R = O${SYM.not}.`:''} Watch if-then ("in the stated case, do this") vs. don't-combine ("avoid this combination").`,
-    mode:'mc', noKeyboard:true, diagnose,
+    instr:`Underline the agent letter to make an imperative ("do it") rather than an indicative ("you're doing it"); underline imperative parts but not factual ones.${mode==='deon'?` "O" = ought; "R" = all right; wrong = ${SYM.not}R = O${SYM.not}.`:''} Watch if-then ("in the stated case, do this") vs. don't-combine ("avoid this combination"). ${UL_TIP}`,
+    mode: state.type?'type':'mc', noKeyboard:!state.type, diagnose,
+    answer: it.ans, accept: normalizeProp,
     choices: mc(it.ans, shuffle(D)),
     explain:()=>`Answer: ${wff(it.ans)}.${it.note?' '+it.note:''}` };
 }
@@ -7300,7 +7681,7 @@ function makeM(){
     prompt: s.prem.length ? 'Say whether valid (and give the proof) or invalid (and refute it).'
                           : 'Prove this deontic theorem — or refute it.',
     stars:selfStar?'self':'auto', train:!!state.gTrain,
-    instr:`Deontic worlds ("D", "DD", …) are ideal alternatives where all obligations are met. Reverse squiggles (${SYM.not}O ⇒ R${SYM.not}, ${SYM.not}R ⇒ O${SYM.not}); drop R into a NEW deontic world; drop O into each OLD deontic world (or, if there is none, into the world it's in). Underlined letters are imperatives. Indicative transfer: plain (non-underlined) wffs move between a deontic world and the world it depends on. Kant's Law: from O comes ${SYM.diamond} (with the underlining removed). In typed mode, prefix deontic lines "D: …".`
+    instr:`Deontic worlds ("D", "DD", …) are ideal alternatives where all obligations are met. Reverse squiggles (${SYM.not}O ⇒ R${SYM.not}, ${SYM.not}R ⇒ O${SYM.not}); drop R into a NEW deontic world; drop O into each OLD deontic world (or, if there is none, into the world it's in). Underlined letters are imperatives. Indicative transfer: plain (non-underlined) wffs move between a deontic world and the world it depends on. Kant's Law: from O comes ${SYM.diamond} (with the underlining removed). In typed mode, prefix deontic lines "D: …". ${UL_TIP}`
   });
 }
 function genM(){
@@ -7413,8 +7794,9 @@ function genN(opts){
   };
   return { setLine:`Set N — ${modeName} Translations`,
     prompt:`"${it.e}"<br>translates into belief logic as:`,
-    instr:`"u:A" = you believe (accept) A. Keep "${SYM.not}u:A" (you don't believe A) distinct from "u:${SYM.not}A" (you believe not-A).${mode==='will'?' Underlining AFTER the colon = willing (accepting an imperative); underlining BEFORE the colon makes the whole formula a command.':''}${mode==='rat'?' "O" on a belief imperative = evident (rationally required); "R" = reasonable (rationally permitted).':''}`,
-    mode:'mc', noKeyboard:true, diagnose,
+    instr:`"u:A" = you believe (accept) A. Keep "${SYM.not}u:A" (you don't believe A) distinct from "u:${SYM.not}A" (you believe not-A).${mode==='will'?' Underlining AFTER the colon = willing (accepting an imperative); underlining BEFORE the colon makes the whole formula a command.':''}${mode==='rat'?' "O" on a belief imperative = evident (rationally required); "R" = reasonable (rationally permitted).':''} ${UL_TIP}`,
+    mode: state.type?'type':'mc', noKeyboard:!state.type, diagnose,
+    answer: it.ans, accept: normalizeProp,
     choices: mc(it.ans, shuffle(D)),
     explain:()=>`Answer: ${wff(it.ans)}.${it.note?' '+it.note:''}` };
 }
@@ -7678,7 +8060,7 @@ function makeO(){
     script:s,
     prompt:`${s.prem.length?'Say whether valid (and give the proof) or invalid (and refute it). An implicit "be consistent" premise is built into the rules.':'Is this a consistency norm? Prove it — or, if it isn’t one, refute it.'}`,
     stars:selfStar?'self':'auto', train:!!state.gTrain,
-    instr:`Belief worlds ("u", "uu", …) contain everything the person is committed to accepting. <b>B−</b>: from "${SYM.not}u:A" derive "u ${SYM.therefore} ${SYM.not}A" in a NEW belief world (star the original). <b>B+</b>: from "u:A" derive "u ${SYM.therefore} A" in any belief world (don't star). Rationality proofs mix worlds: "Du" is the belief world of an ideal deontic world, "DuD" an ideal world of that. In typed mode prefix world lines "u: …", "D: …", "Du: …".${om==='will'||om==='mix'?' <b>Willing:</b> an underlined letter after the colon ("u:A<u>u</u>") is something willed; B+ and B− work the same way.':''}`
+    instr:`Belief worlds ("u", "uu", …) contain everything the person is committed to accepting. <b>B−</b>: from "${SYM.not}u:A" derive "u ${SYM.therefore} ${SYM.not}A" in a NEW belief world (star the original). <b>B+</b>: from "u:A" derive "u ${SYM.therefore} A" in any belief world (don't star). Rationality proofs mix worlds: "Du" is the belief world of an ideal deontic world, "DuD" an ideal world of that. In typed mode prefix world lines "u: …", "D: …", "Du: …".${om==='will'||om==='mix'?' <b>Willing:</b> an underlined letter after the colon ("u:A<u>u</u>") is something willed; B+ and B− work the same way.':''} ${UL_TIP}`
   });
 }
 function genO(){ return makeO(); }
@@ -11600,13 +11982,13 @@ const MENU={
            ['both','Valid &amp; invalid','Prove or refute — you decide which'],
            ['galactic','Galactic travel','Systems T, S4, B, S5 — choose the system below'],
            ['quant','Quantified modal proofs','Quantifiers and modal operators together']]},
-  L:{key:'lMode',
+  L:{key:'lMode', type:true,
      acts:[['imp','Imperative translations','Commands, underlining, don’t-combine forms'],
            ['deon','Deontic translations','"Ought" (O) and "all right" (R), plus modal mixes']]},
   M:{key:'mMode', type:true,
      acts:[['imp','Imperative arguments','Don’t-combine forms'],
            ['proof','Deontic proofs','O / R, deontic worlds']]},
-  N:{key:'nMode',
+  N:{key:'nMode', type:true,
      acts:[['belief','Belief translations','u:A — believing, not-believing, suspending'],
            ['will','Willing translations','Underline after the colon: wanting, resolving, acting-to'],
            ['rat','Rationality translations','Evident (O) and reasonable (R) belief; knowledge']]},
@@ -12169,17 +12551,18 @@ function typedFreeRetryMessage(p, val){
   if(inferScoreKind(p)!=='typeTrans') return null;
   const raw=String(val||'');
   if(p.accept && p.answer && p.accept(raw, p.answer)) return null;
+  if(p.answer && (/<u>/.test(String(p.answer))||/_/.test(raw)) && ulCompare(raw, p.answer)==='ul') return UL_MSG;
   if(p.answer && raw.replace(/\s+/g,' ').trim().toLowerCase()===String(p.answer).replace(/\s+/g,' ').trim().toLowerCase())
     return 'Right structure — check the <b>letter case</b> and edit your answer. No points lost.';
   if(session.set==='A' && !syllLooksWff(raw))
     return 'That isn\'t a syllogistic wff. A wff has one of the eight forms (all/no/some A is B, a is A, a is b, and the "not" forms). Edit it and try again. No points lost.';
-  if('CHJLN'.includes(session.set||'')){
+  if('CHJ'.includes(session.set||'')){
     try{ if(typeof parseProp==='function' && !parseProp(raw)) return 'That isn\'t a well-formed formula — check your parentheses and symbols. Edit it and try again. No points lost.'; }
     catch(e){ return 'That isn\'t a well-formed formula — check your parentheses and symbols. Edit it and try again. No points lost.'; }
   }
   if(p.isWff && !p.isWff(raw))
     return 'That isn\'t a well-formed formula. Edit it and try again. No points lost.';
-  if(p.answer && usesWrongLetters(raw, p.answer)){
+  if(p.answer && usesWrongLetters(raw.replace(/_/g,''), ulText(p.answer).replace(/_/g,''))){
     const d=p.diagnose && p.diagnose(raw);
     return (d||'You didn\'t use the right letters.')+' Edit your answer. No points lost.';
   }
@@ -12318,6 +12701,7 @@ window.answerType=function(){
   if(ok){ awardCorrect(p.explain?p.explain():''); const i=$('ansInput'); if(i) i.disabled=true; }
   else {
     const free=typedFreeRetryMessage(p, val);
+    if(free===UL_MSG){ const fb=$('fb'); fb.className='feedback no show'; fb.innerHTML='❌ '+UL_MSG; const i=$('ansInput'); if(i) i.focus(); return; }
     if(free){ penalizeWrong(free, p.explain?p.explain():'', {free:true, end:false}); return; }
     const ending=endsAfterThisMiss(p);
     penalizeWrong((p.diagnose && p.diagnose(val)) || hintFor(p), p.explain?p.explain():'');
@@ -12556,10 +12940,10 @@ const INFO={
   I:`Quantificational proofs add three rules to the strategy: <b>reverse squiggles</b> (${SYM.not}${qU('x')}Fx ⇒ ${qE('x')}${SYM.not}Fx; ${SYM.not}${qE('x')}Fx ⇒ ${qU('x')}${SYM.not}Fx); <b>drop existentials</b> to an instance with a NEW constant; <b>drop universals</b> to instances with each OLD constant (don't star — reuse as needed). Identity adds: a=a anywhere; equals may substitute for equals. Relational proofs can loop — stop and refute.`,
   J:`${SYM.diamond}A = possibly A (some world); ${SYM.box}A = necessarily A (all worlds). Impossible = ${SYM.not}${SYM.diamond}A. Entails = ${SYM.box}(A${SYM.horseshoe}B). Use a separate box/diamond per modal word; mimic English word order. Quantified: "${SYM.diamond}${qU('x')}…" (possibly all) vs "${qU('x')}${SYM.diamond}…" (each possibly); box-inside (de re) vs box-outside (de dicto).`,
   K:`World prefixes (W, WW, …) name possible worlds; blank = the actual world. <b>Reverse squiggles</b>: ${SYM.not}${SYM.box}A ⇒ ${SYM.diamond}${SYM.not}A; ${SYM.not}${SYM.diamond}A ⇒ ${SYM.box}${SYM.not}A. <b>Drop diamonds</b> into a NEW world; <b>drop boxes</b> into each OLD world. RAA needs a contradiction in the same world. <b>Galactic travel</b>: dropping a diamond issues a ticket W1 ⇒ W2; to drop a box across worlds, T needs a ticket, S4 allows ticket series, B allows tickets backwards, S5 travels freely.`,
-  L:`Underline the agent letter for an imperative: "Au" = you're doing A (indicative); "A<u>u</u>" = do A (imperative). Underline imperative parts but not factual ones: "(A ${SYM.horseshoe} B<u>u</u>)" = if you're (in fact) doing A, then do B. The don't-combine form "${SYM.not}(A<u>u</u> ${SYM.and} B<u>u</u>)" forbids a combination without saying which part to drop. "O" = ought, "R" = all right; wrong = ${SYM.not}R = O${SYM.not}; order matters: ${SYM.not}O (not obligatory) ≠ O${SYM.not} (obligatory not to). Quantified: "O${qU('x')}A<u>x</u>" (it's obligatory that everyone do A) ≠ "${qE('x')}OA<u>x</u>" (some specific person has the duty).`,
-  M:`<b>Imperative arguments:</b> imperatives aren't true or false, so "valid" = the premises conjoined with the conclusion's contradictory are inconsistent; read 1/0 as correct/incorrect. "Au" and "A<u>u</u>" are different wffs. Don't-combine premises "${SYM.not}(A<u>u</u> ${SYM.and} B<u>u</u>)" forbid a pair without saying which part to drop.<br><br><b>Deontic proofs:</b> deontic worlds (D, DD, …) are ideal alternatives. Reverse squiggles: ${SYM.not}O ⇒ R${SYM.not}; ${SYM.not}R ⇒ O${SYM.not}. Drop R into a NEW deontic world (star it); drop O into each deontic world (don't star). Extras: the <b>indicative transfer</b> rule moves indicatives between a deontic world and the world it depends on; <b>Kant's Law</b>: "O A" entails "◊A" (ought implies can).`,
-  N:`"u:A" = you accept (believe) A; "x:A" = x believes A. Keep "${SYM.not}u:A" (you don't believe A) distinct from "u:${SYM.not}A" (you believe not-A); "take no position" = (${SYM.not}u:A ${SYM.and} ${SYM.not}u:${SYM.not}A). Underlining BEFORE the ":" makes the formula an imperative ("<u>u</u>:A" = believe A); underlining AFTER the ":" makes it about willing ("u:A<u>u</u>" = you act/are resolved/desire to do A — act if present and yours, resolve if future, desire if another's). Rationality: "O<u>u</u>:A" = A is evident to you (rationally required); "R<u>u</u>:A" = A would be reasonable for you to believe (rationally permissible).`,
-  O:`Belief logic generates consistency norms (an implicit "be consistent" premise is built into the rules). Belief worlds ("u", "uu", …) contain everything you're committed to accepting. <b>B−</b>: from "${SYM.not}u:A" derive "u ${SYM.therefore} ${SYM.not}A" using a NEW string of u's (star the original). <b>B+</b>: from "u:A" derive "u ${SYM.therefore} A" using any string of u's (don't star). Use B− first, B+ later. Note what fails: not-believing isn't believing-not, and believing doesn't make true. <b>Modes</b> (as in the original LogiCola): <b>Believing</b> — belief formulas "u:A"; B+ and B− apply only when the u is underlined. <b>Willing</b> — imperatives with underlined letters after the colon ("u:A<u>u</u>" = you will that you do A). <b>Rationality</b> — O (ought / evident) and R (all right / reasonable) on beliefs, with deontic and belief worlds combined (D, Du, DDu). <b>Mixed</b> — all three.`,
+  L:`Underline the agent letter for an imperative: "Au" = you're doing A (indicative); "A<u>u</u>" = do A (imperative). Underline imperative parts but not factual ones: "(A ${SYM.horseshoe} B<u>u</u>)" = if you're (in fact) doing A, then do B. The don't-combine form "${SYM.not}(A<u>u</u> ${SYM.and} B<u>u</u>)" forbids a combination without saying which part to drop. "O" = ought, "R" = all right; wrong = ${SYM.not}R = O${SYM.not}; order matters: ${SYM.not}O (not obligatory) ≠ O${SYM.not} (obligatory not to). Quantified: "O${qU('x')}A<u>x</u>" (it's obligatory that everyone do A) ≠ "${qE('x')}OA<u>x</u>" (some specific person has the duty). ${UL_TIP}`,
+  M:`<b>Imperative arguments:</b> imperatives aren't true or false, so "valid" = the premises conjoined with the conclusion's contradictory are inconsistent; read 1/0 as correct/incorrect. "Au" and "A<u>u</u>" are different wffs. Don't-combine premises "${SYM.not}(A<u>u</u> ${SYM.and} B<u>u</u>)" forbid a pair without saying which part to drop.<br><br><b>Deontic proofs:</b> deontic worlds (D, DD, …) are ideal alternatives. Reverse squiggles: ${SYM.not}O ⇒ R${SYM.not}; ${SYM.not}R ⇒ O${SYM.not}. Drop R into a NEW deontic world (star it); drop O into each deontic world (don't star). Extras: the <b>indicative transfer</b> rule moves indicatives between a deontic world and the world it depends on; <b>Kant's Law</b>: "O A" entails "◊A" (ought implies can). ${UL_TIP}`,
+  N:`"u:A" = you accept (believe) A; "x:A" = x believes A. Keep "${SYM.not}u:A" (you don't believe A) distinct from "u:${SYM.not}A" (you believe not-A); "take no position" = (${SYM.not}u:A ${SYM.and} ${SYM.not}u:${SYM.not}A). Underlining BEFORE the ":" makes the formula an imperative ("<u>u</u>:A" = believe A); underlining AFTER the ":" makes it about willing ("u:A<u>u</u>" = you act/are resolved/desire to do A — act if present and yours, resolve if future, desire if another's). Rationality: "O<u>u</u>:A" = A is evident to you (rationally required); "R<u>u</u>:A" = A would be reasonable for you to believe (rationally permissible). ${UL_TIP}`,
+  O:`Belief logic generates consistency norms (an implicit "be consistent" premise is built into the rules). Belief worlds ("u", "uu", …) contain everything you're committed to accepting. <b>B−</b>: from "${SYM.not}u:A" derive "u ${SYM.therefore} ${SYM.not}A" using a NEW string of u's (star the original). <b>B+</b>: from "u:A" derive "u ${SYM.therefore} A" using any string of u's (don't star). Use B− first, B+ later. Note what fails: not-believing isn't believing-not, and believing doesn't make true. <b>Modes</b> (as in the original LogiCola): <b>Believing</b> — belief formulas "u:A"; B+ and B− apply only when the u is underlined. <b>Willing</b> — imperatives with underlined letters after the colon ("u:A<u>u</u>" = you will that you do A). <b>Rationality</b> — O (ought / evident) and R (all right / reasonable) on beliefs, with deontic and belief worlds combined (D, Du, DDu). <b>Mixed</b> — all three. ${UL_TIP}`,
   P:`Set P follows the “Inductive Reasoning” chapter. <b>Percent</b>: probability = (favorable cases × 100) / total equally likely cases (52 cards, 36 dice combinations, 8 patterns for three coins); type a whole number, dropping fractions (one off either way is fine). <b>Odds</b>: first say whether they're in your favor (more favorable cases), even, or against you; then type them, larger number first — in your favor = favorable to unfavorable, against = unfavorable to favorable. <b>Complex</b>: not-A = 100 − A; necessary truth = 100; self-contradiction = 0; both A and B = A × (B given A), or A × B if independent; either A or B = A + B − both, or A + B if they can't both happen; if the problem doesn't say how A affects B, the answer is “unknown”. Odds x to y in favor → probability x/(x+y). <b>Gamble</b>: expected gain = (money you'd win × chances to win − money you'd lose × chances to lose) / total chances. <b>Decide</b>: work out each option's expected value and pick the better one.<br><br><b>Induction</b> and <b>Mill</b>: name the kind of reasoning, then say whether it's in correct form. Statistical: N% of A's are B's; x is an A; this is all we know ∴ it's N% probable that x is B. Sample projection: N% of examined A's are B's; a large and varied group has been examined ∴ probably roughly N% of all A's are B's. Analogy: most things true of x are true of y; x is A; this is all we know ∴ probably y is A. Agreement, difference, disagreement, variation: see the forms shown after each answer — a correct causal conclusion says “probably” and leaves room for the other explanations.<br><br>Our additions: Cards, Dice and Coins (with pictures) and Rules (not / and / or / given / necessary, odds → probability).`,
   Q:`Gensler's five rules for a good lexical definition. A definition should be neither <b>too broad</b> (fits non-instances) nor <b>too narrow</b> (leaves out real ones) — or <b>both</b> at once; should avoid being <b>circular</b> (defines the term with itself) or using <b>poorly understood terms</b>; should <b>match the term in vagueness</b> (not be overly precise); should <b>match its emotional tone</b> (no added positive/negative slant); and should include only <b>essential properties</b> (no accidental features). Use the interchange test: swap the term and its definition in sentences and see if the meaning stays the same.`,
   R:`Eighteen informal fallacies in four groups. <b>Defects of a good argument:</b> circular (question begging) · ambiguous · appeal to emotion · beside the point · straw man. <b>Premise-conclusion patterns:</b> appeal to the crowd · appeal to ignorance · part-whole · genetic · opposition · post hoc ergo propter hoc. <b>Correct-or-faulty forms</b> (fine when their conditions are met, fallacious otherwise): appeal to authority · ad hominem · pro-con. <b>Others:</b> appeal to force · black and white thinking · complex question · false stereotype.<br><br>As in Gensler’s LogiCola, <b>every problem shows the full list of names</b> in two columns. Click a name to open its brief description and a short example (just under the question), then Confirm.`,

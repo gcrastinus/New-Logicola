@@ -107,9 +107,11 @@ with sync_playwright() as pw:
         for trial in range(8):
             r = pg.evaluate("""(m)=>{ state.oMode=m; state.type=true; state.level=9; startSet('O');
               const S=window.__scr, typed=[];
+              const TW=st=>{ const u=ulText(String(st.disp).replace(/^asm:\\s*/,'').replace(/^[^∴]*∴\\s*/,''));
+                return canonWff(u.replace(/_/g,''),'proof')===canonWff(st.typed,'proof') ? u : st.typed; };   // underlines typed as "A_"
               for(const st of S.steps){
-                const v= st.kind==='refute' ? 'REFUTE' : st.kind==='asm' ? 'asm: '+st.typed
-                       : (st.world ? st.world+': '+st.typed : st.typed);
+                const v= st.kind==='refute' ? 'REFUTE' : st.kind==='asm' ? 'asm: '+TW(st)
+                       : (st.world ? st.world+': '+TW(st) : TW(st));
                 typed.push(v);
                 const i=document.getElementById('ansInput'); if(!i) return {fail:'no input', typed};
                 i.value=v; document.getElementById('prfGo').click();
